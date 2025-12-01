@@ -1,4 +1,31 @@
-export interface Submission {
+export interface YswsSubmission {
+  codeUrl: string;
+  demoUrl: string;
+  howDidYouHearAboutThis: string;
+  whatAreWeDoingWell: string;
+  howCanWeImprove: string;
+  authorFirstName: string;
+  authorLastName: string;
+  authorEmail: string;
+  screenshotUrl: string;
+  description: string;
+  authorGithub: string;
+  authorAddress1: string;
+  authorAddress2: string;
+  authorCity: string;
+  authorState: string;
+  authorCountry: string;
+  authorZip: string;
+  authorBirthday: string;
+  hoursSpent: number;
+  hoursSpentJustification: string;
+  approved: boolean;
+  automationError: string;
+  approvedOn: Date | null;
+  yswsDbRecordId: string;
+}
+
+export interface RawAirtableSubmission {
   "Code URL": string;
   "Playable URL": string;
   "How did you hear about this?": string;
@@ -29,6 +56,10 @@ export interface AirtableBase {
   id: string;
   name: string;
   url: string;
+  tableId?: string;
+  tableName?: string;
+  viewId?: string;
+  viewName?: string;
 }
 
 export interface AppConfig {

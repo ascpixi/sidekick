@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AuthSetup } from "./components/AuthSetup";
 import { Header } from "./components/Header";
 import { MainLayout } from "./components/MainLayout";
-import type { AppConfig, AirtableBase, Submission } from "./types/submission";
+import { AirtableService, type AirtableTable } from "./services/airtable";
+import type { AppConfig, AirtableBase, YswsSubmission } from "./types/submission";
 
 const STORAGE_KEY = "sidekick-config";
 
@@ -20,56 +21,151 @@ function App() {
     }
     return null;
   });
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [selectedSubmission, setSelectedSubmission] = useState<Submission | undefined>();
+  const [submissions, setSubmissions] = useState<YswsSubmission[]>([]);
+  const [selectedSubmission, setSelectedSubmission] = useState<YswsSubmission | undefined>();
+  const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
 
   // Save config to localStorage whenever it changes
   useEffect(() => {
     if (config) {
+      console.log("Saving config to localStorage:", config);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     }
   }, [config]);
 
-  const handleAuthComplete = (airtablePAT: string, hackatimeAdminKey: string) => {
-    const newConfig = {
+  function handleAuthComplete(airtablePAT: string, hackatimeAdminKey: string) {
+    setConfig({
       airtablePAT,
       hackatimeAdminKey,
       bases: []
-    };
-    setConfig(newConfig);
-  };
+    });
+  }
 
-  const handleAddBase = (name: string, url: string) => {
-    if (!config) return;
+  const handleUpdateBase = useCallback((baseId: string, tableId: string, tableName: string, viewId?: string, viewName?: string) => {
+    setConfig(prevConfig => {
+      if (!prevConfig) return prevConfig;
+      
+      const updatedBases = prevConfig.bases.map(base => 
+        base.id === baseId 
+          ? { ...base, tableId, tableName, viewId, viewName }
+          : base
+      );
+      
+      return {
+        ...prevConfig,
+        bases: updatedBases
+      };
+    });
+  }, []);
+
+  const tryAutoConfigureTable = useCallback(async (baseId: string) => {
+    if (!config) 
+      return;
     
-    const newBase: AirtableBase = {
-      id: Date.now().toString(),
-      name,
-      url
-    };
+    try {
+      const airtableBaseId = AirtableService.extractBaseIdFromUrl(baseId) || baseId;
+      const airtableService = new AirtableService(config.airtablePAT);
+      const schema = await airtableService.fetchBaseSchema(airtableBaseId);
+      
+      let targetTable = schema.tables.find((table: AirtableTable) => 
+        table.name.toLowerCase() === "ysws project submission"
+      );
+      
+      if (!targetTable) {
+        targetTable = schema.tables.find((table: AirtableTable) => 
+          table.name.toLowerCase() !== "ysws config"
+        );
+      }
+      
+      if (targetTable) {
+        handleUpdateBase(baseId, targetTable.id, targetTable.name);
+      } else {
+        throw new Error("No suitable table found. Expected 'YSWS Project Submission' or at least one table that is not 'YSWS Config'.");
+      }
+    } catch (error) {
+      setSubmissionsError(error instanceof Error ? error.message : "Failed to auto-configure table");
+    }
+  }, [config, handleUpdateBase]);
+
+  const handleAddBase = useCallback((id: string, name: string, url: string) => {
+    if (!config) 
+      return;
     
-    const newBases = [...config.bases, newBase];
+    const newBase: AirtableBase = { id, name, url };
+    
     setConfig({
       ...config,
-      bases: newBases,
-      // Auto-select the first base if none is currently selected
-      selectedBaseId: config.selectedBaseId || newBase.id
+      bases: [...config.bases, newBase],
+      selectedBaseId: newBase.id
     });
-  };
+    
+    setTimeout(() => tryAutoConfigureTable(id), 100);
+  }, [config, tryAutoConfigureTable]);
 
-  const handleBaseSelect = (baseId: string) => {
-    if (!config) return;
+  const fetchSubmissions = useCallback(async (baseId: string) => {
+    if (!config) 
+      return;
+    
+    const selectedBase = config.bases.find(base => base.id === baseId);
+    if (!selectedBase) {
+      setSubmissionsError("Base not found");
+      return;
+    }
+    
+    if (!selectedBase.tableName) {
+      setSubmissionsError("Please configure table and view for this base");
+      return;
+    }
+    
+    setIsLoadingSubmissions(true);
+    setSubmissionsError(null);
+    setSubmissions([]);
+    setSelectedSubmission(undefined);
+    
+    try {
+      const airtableBaseId = AirtableService.extractBaseIdFromUrl(selectedBase.url);
+      if (!airtableBaseId) 
+        throw new Error("Invalid Airtable base URL");
+      
+      const airtableService = new AirtableService(config.airtablePAT);
+      const submissions = await airtableService.fetchSubmissions(
+        airtableBaseId, 
+        selectedBase.tableName, 
+        selectedBase.viewId
+      );
+      
+      setSubmissions(submissions);
+      
+      if (submissions.length > 0) {
+        setSelectedSubmission(submissions[0]);
+      } else {
+        setSelectedSubmission(undefined);
+      }
+    } catch (error) {
+      setSubmissionsError(error instanceof Error ? error.message : "Failed to fetch submissions");
+    } finally {
+      setIsLoadingSubmissions(false);
+    }
+  }, [config]);
+
+  useEffect(() => {
+    if (config?.selectedBaseId) {
+      fetchSubmissions(config.selectedBaseId);
+    }
+  }, [config?.selectedBaseId, fetchSubmissions]);
+
+  function handleBaseSelect(baseId: string) {
+    if (!config) 
+      return;
     
     setConfig({
       ...config,
       selectedBaseId: baseId
     });
     
-    // TODO: Fetch submissions from Airtable
-    // For now, we'll show an empty state
-    setSubmissions([]);
-    setSelectedSubmission(undefined);
-  };
+    fetchSubmissions(baseId);
+  }
 
   // If not authenticated, show auth setup
   if (!config) {
@@ -90,6 +186,8 @@ function App() {
           submissions={submissions}
           selectedSubmission={selectedSubmission}
           onSubmissionSelect={setSelectedSubmission}
+          isLoading={isLoadingSubmissions}
+          error={submissionsError}
         />
       </div>
     </div>

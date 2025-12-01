@@ -1,17 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { AirtableBase } from "../types/submission";
 import { SidekickIcon } from "./SidekickIcon";
 import { ModalHeader } from "./ModalHeader";
 import { Input } from "./Input";
 import { SparklesIcon } from "@heroicons/react/24/outline";
-
-interface HeaderProps {
-  bases: AirtableBase[];
-  selectedBaseId?: string;
-  onBaseSelect: (baseId: string) => void;
-  onAddBase: (name: string, url: string) => void;
-  airtablePAT: string;
-}
+import { AirtableService, type AirtableTable } from "../services/airtable";
 
 interface AirtableApiBase {
   id: string;
@@ -19,13 +12,59 @@ interface AirtableApiBase {
   permissionLevel: string;
 }
 
-export function Header({ bases, selectedBaseId, onBaseSelect, onAddBase, airtablePAT }: HeaderProps) {
+export function Header({ 
+  bases, 
+  selectedBaseId, 
+  onBaseSelect, 
+  onAddBase, 
+  airtablePAT 
+}: { 
+  bases: AirtableBase[];
+  selectedBaseId?: string;
+  onBaseSelect: (baseId: string) => void;
+  onAddBase: (id: string, name: string, url: string) => void;
+  airtablePAT: string;
+}) {
   const [isAddingBase, setIsAddingBase] = useState(false);
   const [availableBases, setAvailableBases] = useState<AirtableApiBase[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoadingBases, setIsLoadingBases] = useState(false);
+  const [submissionCounts, setSubmissionCounts] = useState<Record<string, number>>({});
 
-  const fetchAvailableBases = async () => {
+  const fetchSubmissionCounts = useCallback(async (basesToCheck: AirtableApiBase[]) => {
+    const counts: Record<string, number> = {};
+    const airtableService = new AirtableService(airtablePAT);
+
+    for (const base of basesToCheck) {
+      try {
+        const baseId = AirtableService.extractBaseIdFromUrl(base.id) || base.id;
+        const schema = await airtableService.fetchBaseSchema(baseId);
+        
+        let targetTable = schema.tables.find((table: AirtableTable) => 
+          table.name.toLowerCase() === "ysws project submission"
+        );
+        
+        if (!targetTable) {
+          targetTable = schema.tables.find((table: AirtableTable) => 
+            table.name.toLowerCase() !== "ysws config"
+          );
+        }
+        
+        if (targetTable) {
+          const submissions = await airtableService.fetchSubmissions(baseId, targetTable.name);
+          counts[base.id] = submissions.length;
+        } else {
+          counts[base.id] = 0;
+        }
+      } catch {
+        counts[base.id] = 0;
+      }
+    }
+    
+    setSubmissionCounts(counts);
+  }, [airtablePAT]);
+
+  const fetchAvailableBases = useCallback(async () => {
     if (!airtablePAT) return;
     
     setIsLoadingBases(true);
@@ -43,27 +82,31 @@ export function Header({ bases, selectedBaseId, onBaseSelect, onAddBase, airtabl
           base.name.toLowerCase().includes("ysws")
         );
         setAvailableBases(ywswsBases);
+        
+        fetchSubmissionCounts(ywswsBases);
       }
-    } catch (error) {
-      console.error("Error fetching bases:", error);
+    } catch {
+      // Silently fail
     } finally {
       setIsLoadingBases(false);
     }
-  };
+  }, [airtablePAT, fetchSubmissionCounts]);
 
-  const handleBaseSelection = (base: AirtableApiBase) => {
+  function handleBaseSelection(base: AirtableApiBase) {
     const baseUrl = `https://airtable.com/${base.id}`;
-    onAddBase(base.name, baseUrl);
+    onAddBase(base.id, base.name, baseUrl);
     setIsAddingBase(false);
     setSearchTerm("");
-  };
+  }
 
-  const handleOpenModal = () => {
+  function handleOpenModal() {
     setIsAddingBase(true);
-  };
+  }
 
   // Auto-select first base if none selected and bases exist
   const currentBase = selectedBaseId ? bases.find(base => base.id === selectedBaseId) : bases[0];
+  
+
   
   // Force modal if no bases exist
   const shouldForceModal = bases.length === 0;
@@ -74,7 +117,20 @@ export function Header({ bases, selectedBaseId, onBaseSelect, onAddBase, airtabl
     if (showModal) {
       fetchAvailableBases();
     }
-  }, [showModal, airtablePAT]);
+  }, [showModal, airtablePAT, fetchAvailableBases]);
+
+  // Fetch submission counts for existing bases
+  useEffect(() => {
+    if (bases.length > 0 && airtablePAT) {
+      // Convert existing bases to the format expected by fetchSubmissionCounts
+      const basesToCheck: AirtableApiBase[] = bases.map(base => ({
+        id: base.id,
+        name: base.name,
+        permissionLevel: "read" // This field is not used in fetchSubmissionCounts
+      }));
+      fetchSubmissionCounts(basesToCheck);
+    }
+  }, [bases, airtablePAT, fetchSubmissionCounts]);
 
   return (
     <header className="navbar bg-base-100 shadow-lg px-8 py-4">
@@ -91,10 +147,26 @@ export function Header({ bases, selectedBaseId, onBaseSelect, onAddBase, airtabl
             {bases.map(base => (
               <li key={base.id}>
                 <button 
-                  onClick={() => onBaseSelect(base.id)}
+                  onClick={() => {
+                    onBaseSelect(base.id);
+                    // Close dropdown by removing focus
+                    const activeElement = document.activeElement as HTMLElement;
+                    activeElement?.blur();
+                  }}
                   className={`w-full text-left ${selectedBaseId === base.id ? "active" : ""}`}
                 >
-                  {base.name}
+                  <div className="flex items-center justify-between gap-3">
+                    <span>{base.name}</span>
+                    {submissionCounts[base.id] !== undefined ? (
+                      <div className="badge badge-sm badge-secondary">
+                        {submissionCounts[base.id]}
+                      </div>
+                    ) : (
+                      <div className="badge badge-sm badge-outline">
+                        ...
+                      </div>
+                    )}
+                  </div>
                 </button>
               </li>
             ))}
@@ -145,13 +217,13 @@ export function Header({ bases, selectedBaseId, onBaseSelect, onAddBase, airtabl
                       )
                       .map((base) => (
                         <button
-                          key={base.id}
-                          onClick={() => handleBaseSelection(base)}
-                          className="w-full p-4 text-left hover:bg-base-200 border-b border-base-content/10 last:border-b-0"
+                        key={base.id}
+                        onClick={() => handleBaseSelection(base)}
+                        className="w-full p-4 text-left hover:bg-base-200 border-b border-base-content/10 last:border-b-0 cursor-pointer"
                         >
-                          <div className="font-medium">{base.name}</div>
-                          <div className="text-sm text-base-content/70">{base.id}</div>
-                        </button>
+                        <div className="font-medium">{base.name}</div>
+                        <div className="text-sm text-base-content/70">{base.id}</div>
+                         </button>
                       ))}
                     
                     {availableBases.length === 0 && !isLoadingBases && (
@@ -176,7 +248,7 @@ export function Header({ bases, selectedBaseId, onBaseSelect, onAddBase, airtabl
               {!shouldForceModal && (
                 <button 
                   type="button" 
-                  className="btn"
+                  className="btn btn-outline"
                   onClick={() => setIsAddingBase(false)}
                 >
                   Cancel

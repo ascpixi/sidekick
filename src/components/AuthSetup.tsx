@@ -2,11 +2,11 @@ import { useState } from "react";
 import { ModalHeader } from "./ModalHeader";
 import { Input } from "./Input";
 
-interface AuthSetupProps {
-  onComplete: (airtablePAT: string, hackatimeKey: string) => void;
-}
-
-export function AuthSetup({ onComplete }: AuthSetupProps) {
+export function AuthSetup({ 
+  onComplete 
+}: { 
+  onComplete: (airtablePAT: string, hackatimeKey: string) => void; 
+}) {
   const [airtablePAT, setAirtablePAT] = useState("");
   const [hackatimeKey, setHackatimeKey] = useState("");
 
