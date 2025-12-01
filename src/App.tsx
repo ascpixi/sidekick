@@ -1,35 +1,99 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect } from "react";
+import { AuthSetup } from "./components/AuthSetup";
+import { Header } from "./components/Header";
+import { MainLayout } from "./components/MainLayout";
+import type { AppConfig, AirtableBase, Submission } from "./types/submission";
+
+const STORAGE_KEY = "sidekick-config";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [config, setConfig] = useState<AppConfig | null>(() => {
+    // Load config from localStorage on app start
+    const savedConfig = localStorage.getItem(STORAGE_KEY);
+    if (savedConfig) {
+      try {
+        return JSON.parse(savedConfig);
+      } catch (error) {
+        console.error("Failed to parse saved config:", error);
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+    return null;
+  });
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [selectedSubmission, setSelectedSubmission] = useState<Submission | undefined>();
+
+  // Save config to localStorage whenever it changes
+  useEffect(() => {
+    if (config) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    }
+  }, [config]);
+
+  const handleAuthComplete = (airtablePAT: string, hackatimeAdminKey: string) => {
+    const newConfig = {
+      airtablePAT,
+      hackatimeAdminKey,
+      bases: []
+    };
+    setConfig(newConfig);
+  };
+
+  const handleAddBase = (name: string, url: string) => {
+    if (!config) return;
+    
+    const newBase: AirtableBase = {
+      id: Date.now().toString(),
+      name,
+      url
+    };
+    
+    const newBases = [...config.bases, newBase];
+    setConfig({
+      ...config,
+      bases: newBases,
+      // Auto-select the first base if none is currently selected
+      selectedBaseId: config.selectedBaseId || newBase.id
+    });
+  };
+
+  const handleBaseSelect = (baseId: string) => {
+    if (!config) return;
+    
+    setConfig({
+      ...config,
+      selectedBaseId: baseId
+    });
+    
+    // TODO: Fetch submissions from Airtable
+    // For now, we'll show an empty state
+    setSubmissions([]);
+    setSelectedSubmission(undefined);
+  };
+
+  // If not authenticated, show auth setup
+  if (!config) {
+    return <AuthSetup onComplete={handleAuthComplete} />;
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="h-screen flex flex-col">
+      <Header 
+        bases={config.bases}
+        selectedBaseId={config.selectedBaseId}
+        onBaseSelect={handleBaseSelect}
+        onAddBase={handleAddBase}
+        airtablePAT={config.airtablePAT}
+      />
+      <div className="flex-1 overflow-hidden p-6">
+        <MainLayout 
+          submissions={submissions}
+          selectedSubmission={selectedSubmission}
+          onSubmissionSelect={setSelectedSubmission}
+        />
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </div>
+  );
 }
 
-export default App
+export default App;
