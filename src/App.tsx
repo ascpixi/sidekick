@@ -3,7 +3,8 @@ import { AuthSetup } from "./components/AuthSetup";
 import { Header } from "./components/Header";
 import { MainLayout } from "./components/MainLayout";
 import { AirtableService, type AirtableTable } from "./services/airtable";
-import type { AppConfig, AirtableBase, YswsSubmission } from "./types/submission";
+import type { AppConfig, AirtableBase } from "./types/submission";
+import { YswsSubmission } from "./types/submission";
 
 const STORAGE_KEY = "sidekick-config";
 
@@ -38,7 +39,8 @@ function App() {
     setConfig({
       airtablePAT,
       hackatimeAdminKey,
-      bases: []
+      bases: [],
+      baseSettings: {}
     });
   }
 
@@ -129,10 +131,14 @@ function App() {
         throw new Error("Invalid Airtable base URL");
       
       const airtableService = new AirtableService(config.airtablePAT);
+      const rejectedColumn = config.baseSettings?.[baseId]?.rejectedColumn;
+      const hackatimeProjectsColumn = config.baseSettings?.[baseId]?.hackatimeProjectsColumn;
       const submissions = await airtableService.fetchSubmissions(
         airtableBaseId, 
         selectedBase.tableName, 
-        selectedBase.viewId
+        selectedBase.viewId,
+        rejectedColumn,
+        hackatimeProjectsColumn
       );
       
       setSubmissions(submissions);
@@ -148,6 +154,11 @@ function App() {
       setIsLoadingSubmissions(false);
     }
   }, [config]);
+
+  const handleSubmissionUpdate = useCallback(() => {
+    // Force a re-render by updating the submissions array
+    setSubmissions(prev => [...prev]);
+  }, []);
 
   useEffect(() => {
     if (config?.selectedBaseId) {
@@ -167,6 +178,18 @@ function App() {
     fetchSubmissions(baseId);
   }
 
+  const handleBaseSettingsUpdate = useCallback((baseId: string, settings: import("./types/submission").BaseSettings) => {
+    if (!config) return;
+    
+    setConfig({
+      ...config,
+      baseSettings: {
+        ...config.baseSettings,
+        [baseId]: settings
+      }
+    });
+  }, [config]);
+
   // If not authenticated, show auth setup
   if (!config) {
     return <AuthSetup onComplete={handleAuthComplete} />;
@@ -180,14 +203,20 @@ function App() {
         onBaseSelect={handleBaseSelect}
         onAddBase={handleAddBase}
         airtablePAT={config.airtablePAT}
+        baseSettings={config.baseSettings || {}}
+        onBaseSettingsUpdate={handleBaseSettingsUpdate}
       />
       <div className="flex-1 overflow-hidden p-6">
         <MainLayout 
           submissions={submissions}
           selectedSubmission={selectedSubmission}
           onSubmissionSelect={setSelectedSubmission}
+          onSubmissionUpdate={handleSubmissionUpdate}
           isLoading={isLoadingSubmissions}
           error={submissionsError}
+          currentBase={config.selectedBaseId ? config.bases.find(base => base.id === config.selectedBaseId) : undefined}
+          baseSettings={config.baseSettings || {}}
+          hackatimeAdminKey={config.hackatimeAdminKey}
         />
       </div>
     </div>

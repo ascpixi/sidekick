@@ -1,7 +1,15 @@
-import type { RawAirtableSubmission, YswsSubmission } from "../types/submission";
+import type { RawAirtableSubmission } from "../types/submission";
+import { YswsSubmission } from "../types/submission";
 
-export function transformAirtableSubmission(raw: RawAirtableSubmission): YswsSubmission {
-  return {
+export function transformAirtableSubmission(
+  raw: RawAirtableSubmission, 
+  recordId: string, 
+  baseId: string, 
+  tableName: string,
+  rejectedColumn?: string,
+  hackatimeProjectsColumn?: string
+): YswsSubmission {
+  return new YswsSubmission(baseId, tableName, recordId, {
     codeUrl: raw["Code URL"] || "",
     demoUrl: raw["Playable URL"] || "",
     howDidYouHearAboutThis: raw["How did you hear about this?"] || "",
@@ -11,6 +19,8 @@ export function transformAirtableSubmission(raw: RawAirtableSubmission): YswsSub
     authorLastName: raw["Last Name"] || "",
     authorEmail: raw["Email"] || "",
     screenshotUrl: raw["Screenshot"] || "",
+    screenshotWidth: raw["Screenshot Width"],
+    screenshotHeight: raw["Screenshot Height"],
     description: raw["Description"] || "",
     authorGithub: (raw["GitHub Username"] || "").replace(/^@/, ""),
     authorAddress1: raw["Address (Line 1)"] || "",
@@ -22,11 +32,15 @@ export function transformAirtableSubmission(raw: RawAirtableSubmission): YswsSub
     authorBirthday: raw["Birthday"] || "",
     hoursSpent: parseFloat(raw["Optional - Override Hours Spent"]) || 0,
     hoursSpentJustification: raw["Optional - Override Hours Spent Justification"] || "",
-    approved: Boolean(raw["Automation - Submit to Unified YSWS"]),
+    hackatimeProjectKeys: hackatimeProjectsColumn ? (raw as unknown as Record<string, unknown>)[hackatimeProjectsColumn] as string || "" : "",
+    // A submission is considered "approved" if it has been processed by automation 
+    // and has a YSWS Record ID. The "Submit to Unified YSWS" field is just the trigger.
+    approved: !!raw["Automation - YSWS Record ID"],
+    rejected: rejectedColumn ? !!(raw as unknown as Record<string, unknown>)[rejectedColumn] : false,
     automationError: raw["Automation - Error"] || "",
     approvedOn: raw["Automation - First Submitted At"] ? new Date(raw["Automation - First Submitted At"]) : null,
     yswsDbRecordId: raw["Automation - YSWS Record ID"] || ""
-  };
+  });
 }
 
 export function getSubmissionTitle(submission: YswsSubmission): string {

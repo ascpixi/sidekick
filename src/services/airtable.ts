@@ -1,10 +1,11 @@
-import type { RawAirtableSubmission, YswsSubmission } from "../types/submission";
+import type { RawAirtableSubmission } from "../types/submission";
+import { YswsSubmission } from "../types/submission";
 import { transformAirtableSubmission } from "../utils/submission";
 
 interface AirtableRecord {
   id: string;
   fields: {
-    [key: string]: any;
+    [key: string]: string | number | boolean | string[] | null | undefined;
   };
   createdTime: string;
 }
@@ -12,6 +13,12 @@ interface AirtableRecord {
 interface AirtableResponse {
   records: AirtableRecord[];
   offset?: string;
+}
+
+export interface AirtableField {
+  id: string;
+  name: string;
+  type: string;
 }
 
 export interface AirtableView {
@@ -26,6 +33,7 @@ export interface AirtableTable {
   description?: string;
   primaryFieldId: string;
   views: AirtableView[];
+  fields: AirtableField[];
 }
 
 export interface AirtableBaseSchema {
@@ -59,7 +67,7 @@ export class AirtableService {
     return await response.json();
   }
 
-  async fetchSubmissions(baseId: string, tableName: string, viewId?: string): Promise<YswsSubmission[]> {
+  async fetchSubmissions(baseId: string, tableName: string, viewId?: string, rejectedColumn?: string, hackatimeProjectsColumn?: string): Promise<YswsSubmission[]> {
     if (!this.accessToken) 
       throw new Error("Airtable access token is required");
 
@@ -86,40 +94,92 @@ export class AirtableService {
       offset = data.offset;
     } while (offset);
 
-    return records.map(this.mapRecordToSubmission);
+    return records.map((record) => this.mapRecordToSubmission(record, baseId, tableName, rejectedColumn, hackatimeProjectsColumn));
   }
 
-  private mapRecordToSubmission(record: AirtableRecord): YswsSubmission {
+  private mapRecordToSubmission(record: AirtableRecord, baseId: string, tableName: string, rejectedColumn?: string, hackatimeProjectsColumn?: string): YswsSubmission {
     const fields = record.fields;
     
     const rawSubmission: RawAirtableSubmission = {
-      "Code URL": fields["Code URL"] || "",
-      "Playable URL": fields["Playable URL"] || "",
-      "How did you hear about this?": fields["How did you hear about this?"] || "",
-      "What are we doing well?": fields["What are we doing well?"] || "",
-      "How can we improve?": fields["How can we improve?"] || "",
-      "First Name": fields["First Name"] || "",
-      "Last Name": fields["Last Name"] || "",
-      "Email": fields["Email"] || "",
-      "Screenshot": fields["Screenshot"] ? (Array.isArray(fields["Screenshot"]) ? fields["Screenshot"][0]?.url : fields["Screenshot"]) || "" : "",
-      "Description": fields["Description"] || "",
-      "GitHub Username": fields["GitHub Username"] || "",
-      "Address (Line 1)": fields["Address (Line 1)"] || "",
-      "Address (Line 2)": fields["Address (Line 2)"] || "",
-      "City": fields["City"] || "",
-      "State / Province": fields["State / Province"] || "",
-      "Country": fields["Country"] || "",
-      "ZIP / Postal Code": fields["ZIP / Postal Code"] || "",
-      "Birthday": fields["Birthday"] || "",
-      "Optional - Override Hours Spent": fields["Optional - Override Hours Spent"] || "",
-      "Optional - Override Hours Spent Justification": fields["Optional - Override Hours Spent Justification"] || "",
-      "Automation - Submit to Unified YSWS": fields["Automation - Submit to Unified YSWS"] || "",
-      "Automation - Error": fields["Automation - Error"] || "",
-      "Automation - First Submitted At": fields["Automation - First Submitted At"] || "",
-      "Automation - YSWS Record ID": fields["Automation - YSWS Record ID"] || "",
+      "Code URL": (fields["Code URL"] as string) || "",
+      "Playable URL": (fields["Playable URL"] as string) || "",
+      "How did you hear about this?": (fields["How did you hear about this?"] as string) || "",
+      "What are we doing well?": (fields["What are we doing well?"] as string) || "",
+      "How can we improve?": (fields["How can we improve?"] as string) || "",
+      "First Name": (fields["First Name"] as string) || "",
+      "Last Name": (fields["Last Name"] as string) || "",
+      "Email": (fields["Email"] as string) || "",
+      "Screenshot": fields["Screenshot"] ? (Array.isArray(fields["Screenshot"]) ? (fields["Screenshot"][0] as unknown as { url: string })?.url : (fields["Screenshot"] as string)) || "" : "",
+      "Screenshot Width": fields["Screenshot"] && Array.isArray(fields["Screenshot"]) ? (fields["Screenshot"][0] as unknown as { width: number })?.width : undefined,
+      "Screenshot Height": fields["Screenshot"] && Array.isArray(fields["Screenshot"]) ? (fields["Screenshot"][0] as unknown as { height: number })?.height : undefined,
+      "Description": (fields["Description"] as string) || "",
+      "GitHub Username": (fields["GitHub Username"] as string) || "",
+      "Address (Line 1)": (fields["Address (Line 1)"] as string) || "",
+      "Address (Line 2)": (fields["Address (Line 2)"] as string) || "",
+      "City": (fields["City"] as string) || "",
+      "State / Province": (fields["State / Province"] as string) || "",
+      "Country": (fields["Country"] as string) || "",
+      "ZIP / Postal Code": (fields["ZIP / Postal Code"] as string) || "",
+      "Birthday": (fields["Birthday"] as string) || "",
+      "Optional - Override Hours Spent": (fields["Optional - Override Hours Spent"] as string) || "",
+      "Optional - Override Hours Spent Justification": (fields["Optional - Override Hours Spent Justification"] as string) || "",
+      "Automation - Submit to Unified YSWS": fields["Automation - Submit to Unified YSWS"] ? String(fields["Automation - Submit to Unified YSWS"]) : "",
+      "Automation - Error": (fields["Automation - Error"] as string) || "",
+      "Automation - First Submitted At": (fields["Automation - First Submitted At"] as string) || "",
+      "Automation - YSWS Record ID": (fields["Automation - YSWS Record ID"] as string) || "",
+      ...(rejectedColumn && { [rejectedColumn]: fields[rejectedColumn] }),
+      ...(hackatimeProjectsColumn && { [hackatimeProjectsColumn]: fields[hackatimeProjectsColumn] }),
     };
 
-    return transformAirtableSubmission(rawSubmission);
+    const submission = transformAirtableSubmission(rawSubmission, record.id, baseId, tableName, rejectedColumn, hackatimeProjectsColumn);
+    submission.setAirtableService(this);
+    return submission;
+  }
+
+  async updateSubmission(baseId: string, tableName: string, recordId: string, fields: Record<string, string | number | boolean>): Promise<void> {
+    if (!this.accessToken) {
+      throw new Error("Airtable access token is required");
+    }
+
+    const url = `${this.baseUrl}/${baseId}/${encodeURIComponent(tableName)}/${recordId}`;
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fields
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update submission: ${response.status} ${response.statusText}`);
+    }
+  }
+
+  async createField(baseId: string, tableId: string, fieldName: string, fieldType: string): Promise<AirtableField> {
+    const response = await fetch(`https://api.airtable.com/v0/meta/bases/${baseId}/tables/${tableId}/fields`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: fieldName,
+        type: fieldType,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create field: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  getFieldsByType(table: AirtableTable, type: string): AirtableField[] {
+    return table.fields.filter(field => field.type === type);
   }
 
   static extractBaseIdFromUrl(url: string): string | null {

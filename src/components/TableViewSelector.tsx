@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ModalHeader } from "./ModalHeader";
 import { Input } from "./Input";
 import { AirtableService, type AirtableTable, type AirtableView } from "../services/airtable";
@@ -26,11 +26,7 @@ export function TableViewSelector({
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    fetchTables();
-  }, []);
-
-  const fetchTables = async () => {
+  const fetchTables = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
@@ -40,12 +36,15 @@ export function TableViewSelector({
       const schema = await airtableService.fetchBaseSchema(airtableBaseId);
       setTables(schema.tables);
     } catch (error) {
-      console.error("Failed to fetch tables:", error);
       setError(error instanceof Error ? error.message : "Failed to fetch tables");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [baseId, airtablePAT]);
+
+  useEffect(() => {
+    fetchTables();
+  }, [fetchTables]);
 
   const handleTableSelect = (table: AirtableTable) => {
     setSelectedTable(table);
@@ -119,7 +118,7 @@ export function TableViewSelector({
                       key={table.id}
                       onClick={() => handleTableSelect(table)}
                       className={`w-full p-4 text-left hover:bg-base-200 border-b border-base-content/10 last:border-b-0 ${
-                        selectedTable?.id === table.id ? 'bg-primary/10 border-l-4 border-l-primary' : ''
+                        selectedTable?.id === table.id ? "bg-primary/10 border-l-4 border-l-primary" : ""
                       }`}
                     >
                       <div className="font-medium">{table.name}</div>
@@ -152,7 +151,7 @@ export function TableViewSelector({
                 <button
                   onClick={() => handleViewSelect(null)}
                   className={`w-full p-4 text-left hover:bg-base-200 border-b border-base-content/10 ${
-                    selectedView === null ? 'bg-primary/10 border-l-4 border-l-primary' : ''
+                    selectedView === null ? "bg-primary/10 border-l-4 border-l-primary" : ""
                   }`}
                 >
                   <div className="font-medium">Default View</div>
@@ -164,7 +163,7 @@ export function TableViewSelector({
                     key={view.id}
                     onClick={() => handleViewSelect(view)}
                     className={`w-full p-4 text-left hover:bg-base-200 border-b border-base-content/10 last:border-b-0 ${
-                      selectedView?.id === view.id ? 'bg-primary/10 border-l-4 border-l-primary' : ''
+                      selectedView?.id === view.id ? "bg-primary/10 border-l-4 border-l-primary" : ""
                     }`}
                   >
                     <div className="font-medium">{view.name}</div>

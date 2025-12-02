@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 
 export function ExpandableText({ 
   text, 
@@ -9,44 +9,67 @@ export function ExpandableText({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldTruncate, setShouldTruncate] = useState(false);
-  const textRef = useRef<HTMLParagraphElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const hasChecked = useRef(false);
 
-  useEffect(() => {
-    if (textRef.current) {
-      const lineHeight = parseInt(window.getComputedStyle(textRef.current).lineHeight);
-      const actualHeight = textRef.current.scrollHeight;
-      const maxHeight = lineHeight * maxLines;
-      setShouldTruncate(actualHeight > maxHeight);
-    }
+  const checkTruncation = useCallback(() => {
+    if (!textRef.current || !text || hasChecked.current) return;
+
+    const tempDiv = document.createElement("div");
+    tempDiv.style.position = "absolute";
+    tempDiv.style.visibility = "hidden";
+    tempDiv.style.width = `${textRef.current.clientWidth}px`;
+    tempDiv.style.whiteSpace = "pre-wrap";
+    tempDiv.style.fontSize = window.getComputedStyle(textRef.current).fontSize;
+    tempDiv.style.lineHeight = window.getComputedStyle(textRef.current).lineHeight;
+    tempDiv.style.fontFamily = window.getComputedStyle(textRef.current).fontFamily;
+    tempDiv.textContent = text;
+    
+    document.body.appendChild(tempDiv);
+    
+    const lineHeight = parseFloat(window.getComputedStyle(tempDiv).lineHeight);
+    const actualHeight = tempDiv.scrollHeight;
+    const maxHeight = lineHeight * maxLines;
+    
+    const needsTruncation = actualHeight > maxHeight;
+    document.body.removeChild(tempDiv);
+    
+    setShouldTruncate(needsTruncation);
+    hasChecked.current = true;
   }, [text, maxLines]);
+
+  const handleRef = useCallback((node: HTMLDivElement | null) => {
+    textRef.current = node;
+    hasChecked.current = false;
+    if (node) {
+      setTimeout(checkTruncation, 0);
+    }
+  }, [checkTruncation]);
 
   if (!text) return null;
 
-  if (!shouldTruncate) {
-    return <p className="whitespace-pre-wrap">{text}</p>;
-  }
-
   return (
-    <div>
+    <div ref={handleRef}>
       <p 
-        ref={textRef}
         className="whitespace-pre-wrap"
-        style={{
-          display: isExpanded ? 'block' : '-webkit-box',
-          WebkitLineClamp: isExpanded ? 'none' : maxLines,
-          WebkitBoxOrient: 'vertical' as any,
-          overflow: isExpanded ? 'visible' : 'hidden'
-        }}
+        style={!isExpanded && shouldTruncate ? {
+          display: "-webkit-box",
+          WebkitLineClamp: maxLines,
+          WebkitBoxOrient: "vertical" as const,
+          overflow: "hidden"
+        } : undefined}
       >
         {text}
       </p>
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="text-sm text-primary hover:text-primary-focus mt-2 font-medium cursor-pointer underline"
-      >
-        {isExpanded ? 'Show less' : 'Show more'}
-      </button>
+      {shouldTruncate && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-sm text-primary hover:text-primary-focus mt-2 font-medium cursor-pointer underline"
+        >
+          {isExpanded ? "Show less" : "Show more"}
+        </button>
+      )}
     </div>
   );
 }
