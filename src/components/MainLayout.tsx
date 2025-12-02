@@ -193,7 +193,7 @@ export function MainLayout({
       <div className="flex-1 overflow-y-auto" ref={submissionViewRef}>
         {selectedSubmission ? (
           <div className="p-6">
-            <div className="max-w-4xl">
+            <div>
               <Card className="mb-1">
                 <SubmissionHeader
                   submission={selectedSubmission}
