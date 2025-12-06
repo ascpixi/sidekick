@@ -5,7 +5,7 @@ import { debounce } from "../../utils";
 import type { HeartbeatCluster, Heartbeat } from "../../services/hackatime";
 import type { HeartbeatLoadingProgress } from "../../hooks/useHeartbeatData";
 
-type TabView = "graph" | "table";
+type TabView = "graph" | "table" | "delta";
 
 type ColumnKey = 
   | "time" | "created_at" | "project" | "branch" | "category" | "editor" 
@@ -47,6 +47,29 @@ function formatCellValue(heartbeat: Heartbeat, key: ColumnKey): string {
   if (value instanceof Date) return value.toLocaleString();
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return String(value);
+}
+
+interface DeltaPoint {
+  index: number;
+  deltaT: number;
+  deltaL: number;
+  deltaC: number;
+}
+
+function computeDeltas(heartbeats: Heartbeat[]): DeltaPoint[] {
+  if (heartbeats.length < 2) return [];
+  const deltas: DeltaPoint[] = [];
+  for (let i = 1; i < heartbeats.length; i++) {
+    const prev = heartbeats[i - 1];
+    const curr = heartbeats[i];
+    deltas.push({
+      index: i,
+      deltaT: (curr.time.getTime() - prev.time.getTime()) / 1000,
+      deltaL: Math.abs(curr.lineno - prev.lineno),
+      deltaC: Math.abs(curr.cursorpos - prev.cursorpos),
+    });
+  }
+  return deltas;
 }
 
 function formatDuration(ms: number): string {
@@ -305,6 +328,146 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .attr("stroke", "currentColor")
       .attr("stroke-opacity", 0.4);
 
+    // Horizontal cursor with tooltip
+    const cursorLine = g.append("line")
+      .attr("class", "cursor-line")
+      .attr("y1", 0)
+      .attr("y2", height)
+      .attr("stroke", "currentColor")
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "4,4")
+      .attr("opacity", 0)
+      .attr("pointer-events", "none");
+
+    const tooltip = g.append("g")
+      .attr("class", "cursor-tooltip")
+      .attr("opacity", 0)
+      .attr("pointer-events", "none");
+
+    tooltip.append("rect")
+      .attr("fill", "oklch(var(--b1))")
+      .attr("fill-opacity", 0.75)
+      .attr("stroke", "currentColor")
+      .attr("stroke-opacity", 0.3)
+      .attr("rx", 4)
+      .attr("ry", 4);
+
+    const lineDot = tooltip.append("circle")
+      .attr("r", 5)
+      .attr("fill", "#3b82f6");
+
+    const lineText = tooltip.append("text")
+      .attr("fill", "currentColor")
+      .attr("font-size", "14px")
+      .attr("text-anchor", "start");
+
+    const cursorDot = tooltip.append("circle")
+      .attr("r", 5)
+      .attr("fill", "#ef4444");
+
+    const cursorText = tooltip.append("text")
+      .attr("fill", "currentColor")
+      .attr("font-size", "14px")
+      .attr("text-anchor", "start");
+
+    const deltaText = tooltip.append("text")
+      .attr("fill", "currentColor")
+      .attr("font-size", "12px")
+      .attr("opacity", 0.7)
+      .attr("text-anchor", "start");
+
+    const overlay = g.append("rect")
+      .attr("class", "overlay")
+      .attr("width", width)
+      .attr("height", height)
+      .attr("fill", "transparent")
+      .attr("pointer-events", "all");
+
+    overlay.on("mousemove", function(event) {
+      const [mouseX, mouseY] = d3.pointer(event);
+      
+      if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) {
+        cursorLine.attr("opacity", 0);
+        tooltip.attr("opacity", 0);
+        return;
+      }
+
+      const time = xScale.invert(mouseX);
+
+      const bisect = d3.bisector((d: typeof heartbeats[0]) => d.time).left;
+      const idx = bisect(heartbeats, time);
+      const d0 = heartbeats[idx - 1];
+      const d1 = heartbeats[idx];
+      const nearest = !d0 ? d1 : !d1 ? d0 : 
+        (time.getTime() - d0.time.getTime() > d1.time.getTime() - time.getTime() ? d1 : d0);
+      
+      const nearestIdx = heartbeats.indexOf(nearest);
+      const prev = nearestIdx > 0 ? heartbeats[nearestIdx - 1] : null;
+
+      const snappedX = xScale(nearest.time);
+      cursorLine
+        .attr("x1", snappedX)
+        .attr("x2", snappedX)
+        .attr("opacity", 0.6);
+
+      lineText.text(`Line: ${nearest.lineno}`);
+      cursorText.text(`Cursor: ${nearest.cursorpos}`);
+      
+      if (prev) {
+        const deltaT = (nearest.time.getTime() - prev.time.getTime()) / 1000;
+        const deltaL = nearest.lineno - prev.lineno;
+        const deltaC = nearest.cursorpos - prev.cursorpos;
+        const sign = (n: number) => n >= 0 ? `+${n}` : `${n}`;
+        deltaText.text(`Δ ${deltaT.toFixed(1)}s | ${sign(deltaL)} lines | ${sign(deltaC)} cursor`);
+      } else {
+        deltaText.text("(first heartbeat)");
+      }
+      
+      const lineTextBBox = (lineText.node() as SVGTextElement).getBBox();
+      const cursorTextBBox = (cursorText.node() as SVGTextElement).getBBox();
+      const deltaTextBBox = (deltaText.node() as SVGTextElement).getBBox();
+      const padding = 8;
+      const dotSize = 10;
+      const lineHeight = Math.max(lineTextBBox.height, cursorTextBBox.height) + 4;
+      const deltaRowHeight = deltaTextBBox.height + 4;
+      const tooltipWidth = Math.max(lineTextBBox.width + dotSize + 8, cursorTextBBox.width + dotSize + 8, deltaTextBBox.width) + padding * 2;
+      const tooltipHeight = lineHeight * 2 + deltaRowHeight + padding * 2;
+      
+      let tooltipX = mouseX + 10;
+      let tooltipY = mouseY - tooltipHeight - 5;
+      
+      if (tooltipX + tooltipWidth > width) {
+        tooltipX = mouseX - tooltipWidth - 10;
+      }
+      if (tooltipY < 0) {
+        tooltipY = mouseY + 15;
+      }
+
+      tooltip.attr("transform", `translate(${tooltipX}, ${tooltipY})`);
+      tooltip.select("rect")
+        .attr("width", tooltipWidth)
+        .attr("height", tooltipHeight);
+      
+      const firstRowY = padding + lineHeight * 0.6;
+      const secondRowY = padding + lineHeight + lineHeight * 0.6;
+      const thirdRowY = padding + lineHeight * 2 + deltaRowHeight * 0.6;
+      
+      lineDot.attr("cx", padding + 5).attr("cy", firstRowY);
+      lineText.attr("x", padding + dotSize + 8).attr("y", firstRowY + 4);
+      
+      cursorDot.attr("cx", padding + 5).attr("cy", secondRowY);
+      cursorText.attr("x", padding + dotSize + 8).attr("y", secondRowY + 4);
+      
+      deltaText.attr("x", padding).attr("y", thirdRowY + 2);
+
+      tooltip.attr("opacity", 1);
+    });
+
+    overlay.on("mouseleave", function() {
+      cursorLine.attr("opacity", 0);
+      tooltip.attr("opacity", 0);
+    });
+
   }, [clusters, currentClusterIndex, dimensions, activeTab, debouncedSetVisibleTimeRange]);
 
   if (isLoading) {
@@ -385,6 +548,13 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
             onClick={() => setActiveTab("table")}
           >
             Table View
+          </button>
+          <button
+            role="tab"
+            className={`tab border-base-content/50! ${activeTab === "delta" ? "tab-active" : ""}`}
+            onClick={() => setActiveTab("delta")}
+          >
+            Delta Plot
           </button>
         </div>
         {hackatimeUserId && (
@@ -491,6 +661,129 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
           </div>
         </div>
       )}
+
+      {activeTab === "delta" && (
+        <DeltaPlotView heartbeats={currentCluster.heartbeats} width={dimensions.width} />
+      )}
+    </div>
+  );
+}
+
+function DeltaPlotView({ heartbeats, width }: { heartbeats: Heartbeat[]; width: number }) {
+  const deltaTRef = useRef<SVGSVGElement>(null);
+  const deltaLRef = useRef<SVGSVGElement>(null);
+  const deltaCRef = useRef<SVGSVGElement>(null);
+
+  const deltas = useMemo(() => computeDeltas(heartbeats), [heartbeats]);
+
+  const plotHeight = 180;
+  const margin = { top: 20, right: 20, bottom: 40, left: 60 };
+  const plotWidth = width - margin.left - margin.right;
+  const innerHeight = plotHeight - margin.top - margin.bottom;
+
+  useEffect(() => {
+    if (deltas.length === 0) return;
+
+    const xScale = d3.scaleLinear()
+      .domain([0, deltas.length])
+      .range([0, plotWidth]);
+
+    function renderPlot(
+      svgRef: React.RefObject<SVGSVGElement | null>,
+      accessor: (d: DeltaPoint) => number,
+      color: string,
+      yLabel: string,
+      tooltip: (d: DeltaPoint) => string
+    ) {
+      if (!svgRef.current) return;
+
+      const svg = d3.select(svgRef.current);
+      svg.selectAll("*").remove();
+
+      const yMax = d3.max(deltas, accessor) || 1;
+      const yScale = d3.scaleLinear()
+        .domain([0, yMax * 1.1])
+        .range([innerHeight, 0]);
+
+      const g = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      g.append("g")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .call(d3.axisBottom(xScale).ticks(Math.min(10, deltas.length)));
+
+      g.append("g")
+        .call(d3.axisLeft(yScale).ticks(5));
+
+      g.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -45)
+        .attr("x", -innerHeight / 2)
+        .attr("fill", "currentColor")
+        .style("text-anchor", "middle")
+        .style("font-size", "12px")
+        .text(yLabel);
+
+      g.append("text")
+        .attr("x", plotWidth / 2)
+        .attr("y", innerHeight + 35)
+        .attr("fill", "currentColor")
+        .style("text-anchor", "middle")
+        .style("font-size", "12px")
+        .text("Heartbeat Index");
+
+      g.selectAll(".delta-dot")
+        .data(deltas)
+        .enter()
+        .append("circle")
+        .attr("class", "delta-dot")
+        .attr("cx", d => xScale(d.index))
+        .attr("cy", d => yScale(accessor(d)))
+        .attr("r", 4)
+        .attr("fill", color)
+        .attr("opacity", 0.7)
+        .append("title")
+        .text(tooltip);
+    }
+
+    renderPlot(deltaTRef, d => d.deltaT, "#8b5cf6", "Δt (seconds)", d => `Δt: ${d.deltaT.toFixed(1)}s`);
+    renderPlot(deltaLRef, d => d.deltaL, "#3b82f6", "ΔL (lines)", d => `ΔL: ${d.deltaL} lines`);
+    renderPlot(deltaCRef, d => d.deltaC, "#ef4444", "ΔC (chars)", d => `ΔC: ${d.deltaC} chars`);
+  }, [deltas, plotWidth, innerHeight]);
+
+  if (deltas.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-48 bg-base-200 rounded-lg">
+        <p className="text-gray-500">Not enough heartbeats to compute deltas</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4">
+        <div className="rounded-lg border border-base-content/10 p-2">
+          <div className="flex items-center gap-2 mb-1 px-2">
+            <span className="w-3 h-3 rounded-full bg-violet-500" />
+            <span className="text-sm font-medium">Time Between Heartbeats (Δt)</span>
+          </div>
+          <svg ref={deltaTRef} width={width} height={plotHeight} />
+        </div>
+        <div className="rounded-lg border border-base-content/10 p-2">
+          <div className="flex items-center gap-2 mb-1 px-2">
+            <span className="w-3 h-3 rounded-full bg-blue-500" />
+            <span className="text-sm font-medium">Line Number Change (ΔL)</span>
+          </div>
+          <svg ref={deltaLRef} width={width} height={plotHeight} />
+        </div>
+        <div className="rounded-lg border border-base-content/10 p-2">
+          <div className="flex items-center gap-2 mb-1 px-2">
+            <span className="w-3 h-3 rounded-full bg-red-500" />
+            <span className="text-sm font-medium">Cursor Movement (ΔC)</span>
+          </div>
+          <svg ref={deltaCRef} width={width} height={plotHeight} />
+        </div>
+      </div>
     </div>
   );
 }
