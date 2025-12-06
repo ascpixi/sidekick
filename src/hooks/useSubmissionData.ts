@@ -32,7 +32,7 @@ export function useSubmissionData(
 
   useEffect(() => {
     if (!selectedSubmission) return;
-    
+
     const timeoutId = setTimeout(() => {
       setLocalHoursSpent(selectedSubmission.hoursSpent || 0);
       setLocalHoursSpentJustification(selectedSubmission.hoursSpentJustification || "");
@@ -44,7 +44,7 @@ export function useSubmissionData(
 
   useEffect(() => {
     if (!selectedSubmission) return;
-    
+
     const timeout = setTimeout(() => {
       if (localHoursSpentJustification !== selectedSubmission.hoursSpentJustification) {
         updateHoursSpentJustification(selectedSubmission, localHoursSpentJustification);
@@ -53,19 +53,6 @@ export function useSubmissionData(
     
     return () => clearTimeout(timeout);
   }, [localHoursSpentJustification, selectedSubmission, updateHoursSpentJustification]);
-
-  useEffect(() => {
-    if (!selectedSubmission) return;
-    
-    const timeout = setTimeout(() => {
-      if (localHackatimeProjectKeys !== selectedSubmission.hackatimeProjectKeys) {
-        // This requires the hackatimeProjectsColumn to be passed in
-        // We'll handle this in the component instead
-      }
-    }, 500);
-    
-    return () => clearTimeout(timeout);
-  }, [localHackatimeProjectKeys, selectedSubmission]);
 
   return {
     localHoursSpent,
