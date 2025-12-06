@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 import * as d3 from "d3";
 import { HeartIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/outline";
-import { debounce } from "../../utils/debounce";
-import type { HeartbeatCluster, Heartbeat } from "../../utils/heartbeatClustering";
+import { debounce } from "../../utils";
+import type { HeartbeatCluster, Heartbeat } from "../../services/hackatime";
 import type { HeartbeatLoadingProgress } from "../../hooks/useHeartbeatData";
 
 type TabView = "graph" | "table";
@@ -342,10 +342,10 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
               <HeartIcon className="w-5 h-5" />
               Heartbeat Activity
             </h3>
-          <p className="text-sm text-gray-600">
-            Cluster {currentClusterIndex + 1} of {clusters.length} • 
-            {currentCluster.heartbeats.length} heartbeats • 
-            {currentCluster.startTime.toLocaleTimeString()} - {currentCluster.endTime.toLocaleTimeString()}
+          <p className="text-sm text-gray-600 flex gap-2">
+            <span>Cluster {currentClusterIndex + 1} of {clusters.length}</span> •
+            <span>{currentCluster.heartbeats.length} heartbeats</span> • 
+            <span>{currentCluster.startTime.toLocaleTimeString()} - {currentCluster.endTime.toLocaleTimeString()}</span>
           </p>
         </div>
         
@@ -374,14 +374,14 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
         <div role="tablist" className="tabs tabs-lift">
           <button
             role="tab"
-            className={`tab !border-base-content/50 ${activeTab === "graph" ? "tab-active" : ""}`}
+            className={`tab border-base-content/50! ${activeTab === "graph" ? "tab-active" : ""}`}
             onClick={() => setActiveTab("graph")}
           >
             Graph View
           </button>
           <button
             role="tab"
-            className={`tab !border-base-content/50 ${activeTab === "table" ? "tab-active" : ""}`}
+            className={`tab border-base-content/50! ${activeTab === "table" ? "tab-active" : ""}`}
             onClick={() => setActiveTab("table")}
           >
             Table View
