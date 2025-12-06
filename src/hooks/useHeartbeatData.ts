@@ -31,6 +31,8 @@ export function useHeartbeatData(
   }, [hackatimeApiKey]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchHeartbeats() {
       if (!hackatimeService || !selectedSubmission?.authorEmail) {
         setHeartbeats([]);
@@ -56,6 +58,8 @@ export function useHeartbeatData(
 
       try {
         const userId = await hackatimeService.findIdByEmail(selectedSubmission.authorEmail);
+        if (cancelled) return;
+
         if (!userId) {
           setError("User not found in Hackatime");
           setHeartbeats([]);
@@ -67,16 +71,20 @@ export function useHeartbeatData(
         setHackatimeUserId(userId);
 
         const userInfo = await hackatimeService.getUserInfo(userId);
+        if (cancelled) return;
+
         setTrustLevel(userInfo.trust_level);
 
         if (userInfo.trust_level === "yellow" || userInfo.trust_level === "red") {
           const logs = await hackatimeService.getTrustLogs(userId);
+          if (cancelled) return;
           setTrustLogs(logs);
         } else {
           setTrustLogs([]);
         }
 
         const allProjects = await hackatimeService.getUserProjects(userId);
+        if (cancelled) return;
 
         const keys = selectedSubmission.hackatimeProjectKeys
           .split(/[,;]/)
@@ -116,7 +124,11 @@ export function useHeartbeatData(
         setProgress({ current: 0, total: totalDays });
 
         while (currentDate <= endDay) {
+          if (cancelled) return;
+
           const rawHeartbeats = await hackatimeService.getHeartbeatsFor(userId, currentDate);
+          if (cancelled) return;
+
           const filtered = rawHeartbeats.filter(x => x.project && keys.includes(x.project.toLowerCase()));
 
           for (const hb of filtered) {
@@ -150,18 +162,26 @@ export function useHeartbeatData(
           setProgress({ current: currentDay, total: totalDays });
         }
 
+        if (cancelled) return;
         setHeartbeats(allHeartbeats);
       } catch (err) {
+        if (cancelled) return;
         console.error("Failed to fetch heartbeats:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch heartbeat data");
         setHeartbeats([]);
       } finally {
-        setIsLoading(false);
-        setProgress(null);
+        if (!cancelled) {
+          setIsLoading(false);
+          setProgress(null);
+        }
       }
     }
 
     fetchHeartbeats();
+
+    return () => {
+      cancelled = true;
+    };
   }, [hackatimeService, selectedSubmission?.authorEmail, selectedSubmission?.hackatimeProjectKeys]);
 
   return {
