@@ -48,13 +48,11 @@ export function BaseSettingsModal({
       const baseId = AirtableService.extractBaseIdFromUrl(base.id) || base.id;
       const schema = await airtableService.fetchBaseSchema(baseId);
 
-      // Filter out YSWS Config table
       const filteredTables = schema.tables.filter(table => 
         table.name.toLowerCase() !== "ysws config"
       );
       setTables(filteredTables);
 
-      // Auto-select the main submission table
       const mainTable = filteredTables.find(table => 
         table.name.toLowerCase() === "ysws project submission"
       ) || filteredTables[0];
@@ -75,18 +73,13 @@ export function BaseSettingsModal({
 
   async function createColumn(fieldName: string, fieldType: string, settingKey: keyof BaseSettings) {
     if (!selectedTable) return;
-
     setIsCreatingColumn(fieldName);
     try {
       const airtableService = new AirtableService(airtablePAT);
       const baseId = AirtableService.extractBaseIdFromUrl(base.id) || base.id;
       
       await airtableService.createField(baseId, selectedTable.id, fieldName, fieldType);
-      
-      // Refresh the schema
       await loadBaseSchema();
-      
-      // Auto-select the newly created field
       setFormData(prev => ({
         ...prev,
         [settingKey]: fieldName
@@ -117,9 +110,7 @@ export function BaseSettingsModal({
 
   async function createColumnWithName() {
     if (!pendingColumnType || !newColumnName.trim()) return;
-    
     await createColumn(newColumnName.trim(), pendingColumnType.type, pendingColumnType.settingKey);
-    
     setIsColumnNameModalOpen(false);
     setPendingColumnType(null);
     setNewColumnName("");
@@ -128,7 +119,6 @@ export function BaseSettingsModal({
   const checkboxFields = selectedTable 
     ? new AirtableService(airtablePAT).getFieldsByType(selectedTable, "checkbox").filter(field => {
         const fieldName = field.name.toLowerCase();
-        // Ignore these checkbox columns for rejected column selection
         return fieldName !== "automation - submit to unified ysws" && 
                fieldName !== "idv_verified";
       })
@@ -137,7 +127,6 @@ export function BaseSettingsModal({
   const textFields = selectedTable 
     ? new AirtableService(airtablePAT).getFieldsByType(selectedTable, "singleLineText").filter(field => {
         const fieldName = field.name.toLowerCase();
-        // Ignore well-known short text columns for hackatime projects column selection
         const ignoredFields = [
           "first name", "last name", "github username", 
           "address (line 1)", "address (line 2)", "city", "state / province", 
@@ -167,7 +156,6 @@ export function BaseSettingsModal({
             </div>
           ) : (
             <>
-              {/* Table Selection */}
               {tables.length > 1 && (
                 <div>
                   <label className="label">
@@ -193,7 +181,6 @@ export function BaseSettingsModal({
 
               {selectedTable && (
                 <>
-                  {/* Rejected Column */}
                   <div>
                     <label className="label">
                       <span className="label-text font-medium">Rejected Column</span>
@@ -225,7 +212,6 @@ export function BaseSettingsModal({
                     </select>
                   </div>
 
-                  {/* Hackatime Projects Column */}
                   <div>
                     <label className="label">
                       <span className="label-text font-medium">Hackatime Projects Column</span>
@@ -257,7 +243,6 @@ export function BaseSettingsModal({
                     </select>
                   </div>
 
-                  {/* HCB Org Name */}
                   <div>
                     <label className="label">
                       <span className="label-text font-medium">HCB Organization Name</span>
@@ -293,7 +278,6 @@ export function BaseSettingsModal({
         </form>
       </div>
 
-      {/* Column Name Modal */}
       {isColumnNameModalOpen && (
         <div className="modal modal-open">
           <div className="modal-box">
