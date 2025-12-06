@@ -1,6 +1,5 @@
 import type { RawAirtableSubmission } from "../types/submission";
-import { YswsSubmission } from "../types/submission";
-import { transformAirtableSubmission } from "../utils/submission";
+import { YswsSubmission, transformAirtableSubmission } from "../types/submission";
 
 interface AirtableRecord {
   id: string;
@@ -183,13 +182,11 @@ export class AirtableService {
   }
 
   static extractBaseIdFromUrl(url: string): string | null {
-    // Handle both full URLs and just base IDs
     if (url.includes("airtable.com")) {
       const match = url.match(/app[a-zA-Z0-9]+/);
       return match ? match[0] : null;
     }
     
-    // If it's already a base ID, return it
     if (url.startsWith("app")) {
       return url;
     }
