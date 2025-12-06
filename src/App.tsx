@@ -28,6 +28,11 @@ function App() {
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [submissionsError, setSubmissionsError] = useState<string | null>(null);
 
+  const handleSubmissionSelect = useCallback((submission: YswsSubmission) => {
+    setSelectedSubmission(submission);
+    window.location.hash = submission.recordId;
+  }, []);
+
   useEffect(() => {
     if (config) {
       console.log("Saving config to localStorage:", config);
@@ -137,7 +142,12 @@ function App() {
       );
       
       setSubmissions(submissions);
-      setSelectedSubmission(submissions.length > 0 ? submissions[0] : undefined);
+      
+      const hashRecordId = window.location.hash.slice(1);
+      const restoredSubmission = hashRecordId 
+        ? submissions.find(s => s.recordId === hashRecordId)
+        : undefined;
+      setSelectedSubmission(restoredSubmission ?? (submissions.length > 0 ? submissions[0] : undefined));
     } catch (error) {
       setSubmissionsError(error instanceof Error ? error.message : "Failed to fetch submissions");
     } finally {
@@ -193,7 +203,7 @@ function App() {
         <MainLayout 
           submissions={submissions}
           selectedSubmission={selectedSubmission}
-          onSubmissionSelect={setSelectedSubmission}
+          onSubmissionSelect={handleSubmissionSelect}
           onSubmissionUpdate={handleSubmissionUpdate}
           isLoading={isLoadingSubmissions}
           error={submissionsError}
