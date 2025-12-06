@@ -23,7 +23,7 @@ export function ActionButtons({
   if (submission.approved && hcbOrgName) {
     return (
       <button onClick={onSendGrant} className="btn btn-primary btn-md">
-        <BanknotesIcon className="h-5 w-5" />
+          <BanknotesIcon className="h-4 w-4" />
         Send HCB grant
       </button>
     );
@@ -63,7 +63,7 @@ export function ActionButtons({
             </>
           ) : (
             <>
-              <CheckIcon className="h-5 w-5" />
+              <CheckIcon className="h-4 w-4" />
               Approve
             </>
           )}
@@ -80,7 +80,7 @@ export function ActionButtons({
             </>
           ) : (
             <>
-              <XMarkIcon className="h-5 w-5" />
+              <XMarkIcon className="h-4 w-4" />
               Reject
             </>
           )}
