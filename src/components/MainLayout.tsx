@@ -90,7 +90,7 @@ export function MainLayout({
           <button
             key={index}
             onClick={() => onSubmissionSelect(submission)}
-            className={`w-full p-4 text-left transition-colors cursor-pointer flex items-center gap-3 ${
+            className={`w-full p-4 text-left transition-colors cursor-pointer flex items-center gap-3 rounded-lg ${
               isSelected 
                 ? "bg-primary bg-opacity-10 border-r-2 border-primary" 
                 : "hover:bg-base-200"
@@ -206,7 +206,28 @@ export function MainLayout({
         {selectedSubmission ? (
           <div className="p-6">
             <div>
-              <Card className="mb-1">
+              <Card className="mb-1 border border-base-content/10 rounded-2xl">
+                {selectedSubmission.screenshotUrl && (
+                  <div 
+                    className="w-full h-48 -mx-6 -mt-6 mb-4 rounded-t-2xl overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                    style={{ width: "calc(100% + 3rem)" }}
+                    onClick={() => setPreviewImage(selectedSubmission.screenshotUrl!)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setPreviewImage(selectedSubmission.screenshotUrl!);
+                      }
+                    }}
+                  >
+                    <img 
+                      src={selectedSubmission.screenshotUrl} 
+                      alt="Project screenshot" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
                 <SubmissionHeader
                   submission={selectedSubmission}
                   isApproving={submissionActions.approvingSubmission === selectedSubmission.recordId}
