@@ -1,8 +1,8 @@
 import { ClockIcon } from "@heroicons/react/24/outline";
 import { Accordion } from "./Accordion";
 import { HeartbeatGraph } from "./HeartbeatGraph";
-import { useState, useMemo, useEffect } from "react";
-import { clusterHeartbeats, type Heartbeat } from "../../utils/heartbeatClustering";
+import { useState, useMemo } from "react";
+import { clusterHeartbeats, type Heartbeat } from "../../services/hackatime";
 import type { HeartbeatLoadingProgress } from "../../hooks/useHeartbeatData";
 
 export function TimeSection({
@@ -32,16 +32,21 @@ export function TimeSection({
   isLoadingHeartbeats?: boolean;
   hackatimeUserId?: number | null;
 }) {
-  const [currentClusterIndex, setCurrentClusterIndex] = useState(0);
+  const heartbeatsKey = heartbeats.length > 0 
+    ? `${heartbeats.length}-${heartbeats[0]?.time ?? 0}` 
+    : "empty";
+  const [clusterState, setClusterState] = useState({ key: heartbeatsKey, index: 0 });
+
+  const currentClusterIndex = clusterState.key === heartbeatsKey ? clusterState.index : 0;
+
+  const setCurrentClusterIndex = (index: number) => {
+    setClusterState({ key: heartbeatsKey, index });
+  };
 
   const clusters = useMemo(() => {
     const allClusters = clusterHeartbeats(heartbeats);
     const significantClusters = allClusters.filter(c => c.heartbeats.length > 10);
     return significantClusters.length > 0 ? significantClusters : allClusters;
-  }, [heartbeats]);
-
-  useEffect(() => {
-    setCurrentClusterIndex(0);
   }, [heartbeats]);
 
   return (
