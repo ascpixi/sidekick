@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { HackatimeService, type HackatimeTrustLevel } from "../services/hackatime";
+import { HackatimeService, type HackatimeTrustLevel, type HackatimeTrustLog } from "../services/hackatime";
 import { YswsSubmission } from "../types/submission";
-import type { Heartbeat } from "../utils/heartbeatClustering";
+import type { Heartbeat } from "../services/hackatime";
 
 export interface HeartbeatLoadingProgress {
   current: number;
@@ -18,6 +18,7 @@ export function useHeartbeatData(
   const [progress, setProgress] = useState<HeartbeatLoadingProgress | null>(null);
   const [hackatimeUserId, setHackatimeUserId] = useState<number | null>(null);
   const [trustLevel, setTrustLevel] = useState<HackatimeTrustLevel | null>(null);
+  const [trustLogs, setTrustLogs] = useState<HackatimeTrustLog[]>([]);
 
   const hackatimeService = useMemo(() => {
     if (!hackatimeApiKey) return null;
@@ -34,6 +35,7 @@ export function useHeartbeatData(
       if (!hackatimeService || !selectedSubmission?.authorEmail) {
         setHeartbeats([]);
         setTrustLevel(null);
+        setTrustLogs([]);
         return;
       }
 
@@ -45,6 +47,7 @@ export function useHeartbeatData(
       if (projectKeys.length === 0) {
         setHeartbeats([]);
         setTrustLevel(null);
+        setTrustLogs([]);
         return;
       }
 
@@ -58,12 +61,20 @@ export function useHeartbeatData(
           setHeartbeats([]);
           setHackatimeUserId(null);
           setTrustLevel(null);
+          setTrustLogs([]);
           return;
         }
         setHackatimeUserId(userId);
 
         const userInfo = await hackatimeService.getUserInfo(userId);
         setTrustLevel(userInfo.trust_level);
+
+        if (userInfo.trust_level === "yellow" || userInfo.trust_level === "red") {
+          const logs = await hackatimeService.getTrustLogs(userId);
+          setTrustLogs(logs);
+        } else {
+          setTrustLogs([]);
+        }
 
         const allProjects = await hackatimeService.getUserProjects(userId);
 
@@ -159,6 +170,7 @@ export function useHeartbeatData(
     error,
     progress,
     hackatimeUserId,
-    trustLevel
+    trustLevel,
+    trustLogs
   };
 }
