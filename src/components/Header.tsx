@@ -152,7 +152,7 @@ export function Header({
   }, [bases, airtablePAT, fetchSubmissionCounts, baseSettings]);
 
   return (
-    <header className="navbar bg-base-100 shadow-lg px-8 py-4">
+    <header className="navbar bg-base-100 shadow-lg px-4 sm:px-8 py-4 flex-shrink-0">
       <div className="flex-1">
         <div className="flex items-center gap-3">
           <div className="dropdown">
@@ -163,7 +163,7 @@ export function Header({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
               </svg>
             </div>
-          <ul tabIndex={0} className="dropdown-content menu bg-base-100 rounded-box z-[1] w-80 p-2 shadow-xl border border-base-content/10">
+          <ul tabIndex={0} className="dropdown-content menu bg-base-100 rounded-box z-50 w-80 p-2 shadow-xl border border-base-content/10">
             {bases.map(base => (
               <li key={base.id}>
                 <button 
@@ -204,7 +204,7 @@ export function Header({
           {currentBase && (
             <button
               onClick={handleConfigureBase}
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-md sm:btn-sm"
               title="Configure base settings"
             >
               <WrenchScrewdriverIcon className="w-4 h-4" />

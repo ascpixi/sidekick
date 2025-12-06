@@ -190,7 +190,7 @@ function App() {
   if (!config) return <AuthSetup onComplete={handleAuthComplete} />;
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="min-h-screen sm:h-screen flex flex-col overflow-y-auto sm:overflow-hidden">
       <Header 
         bases={config.bases}
         selectedBaseId={config.selectedBaseId}
@@ -200,7 +200,7 @@ function App() {
         baseSettings={config.baseSettings || {}}
         onBaseSettingsUpdate={handleBaseSettingsUpdate}
       />
-      <div className="flex-1 overflow-hidden p-6">
+      <div className="flex-1 sm:overflow-hidden p-1 sm:p-6">
         <MainLayout 
           submissions={submissions}
           selectedSubmission={selectedSubmission}

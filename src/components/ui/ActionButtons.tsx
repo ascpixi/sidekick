@@ -29,7 +29,8 @@ export function ActionButtons({
       title="Open in Airtable"
     >
       <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-      Open in Airtable
+      <span className="sm:hidden">Airtable</span>
+      <span className="hidden sm:inline">Open in Airtable</span>
     </a>
   );
 

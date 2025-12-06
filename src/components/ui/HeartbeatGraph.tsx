@@ -499,15 +499,17 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
 
   return (
     <div ref={containerRef} className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
               <HeartIcon className="w-5 h-5" />
               Heartbeat Activity
             </h3>
-          <p className="text-sm text-gray-600 flex gap-2">
-            <span>Cluster {currentClusterIndex + 1} of {clusters.length}</span> •
-            <span>{currentCluster.heartbeats.length} heartbeats</span> • 
+          <p className="text-sm text-gray-600 flex flex-wrap gap-x-2">
+            <span>Cluster {currentClusterIndex + 1} of {clusters.length}</span>
+            <span className="hidden sm:inline">•</span>
+            <span>{currentCluster.heartbeats.length} heartbeats</span>
+            <span className="hidden sm:inline">•</span>
             <span>{currentCluster.startTime.toLocaleTimeString()} - {currentCluster.endTime.toLocaleTimeString()}</span>
           </p>
         </div>
@@ -533,7 +535,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <div role="tablist" className="tabs tabs-lift">
           <button
             role="tab"
@@ -558,7 +560,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
           </button>
         </div>
         {hackatimeUserId && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <a
               href={`https://billy.3kh0.net/?u=${encodeURIComponent(hackatimeUserId)}&d=${clusters[0].startTime.toISOString().split("T")[0]}-${clusters[clusters.length - 1].endTime.toISOString().split("T")[0]}`}
               target="_blank"

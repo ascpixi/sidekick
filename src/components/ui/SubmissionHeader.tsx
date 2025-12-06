@@ -25,8 +25,8 @@ export function SubmissionHeader({
   hcbOrgName?: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-3">
-      <h1 className="text-2xl font-bold">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3 sm:mb-3">
+      <h1 className="text-xl sm:text-2xl font-bold break-all">
         {submission.demoUrl ? (
           <a 
             href={submission.demoUrl} 
@@ -42,7 +42,7 @@ export function SubmissionHeader({
           </span>
         )}
       </h1>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-shrink-0 mt-2 sm:mt-0">
         <ActionButtons
           submission={submission}
           isApproving={isApproving}

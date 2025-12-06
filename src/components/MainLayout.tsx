@@ -1,5 +1,5 @@
 import { YswsSubmission, type BaseSettings, type AirtableBase, getSubmissionTitle } from "../types/submission";
-import { EnvelopeIcon, CodeBracketIcon, ExclamationTriangleIcon, NoSymbolIcon } from "@heroicons/react/24/outline";
+import { EnvelopeIcon, CodeBracketIcon, ExclamationTriangleIcon, NoSymbolIcon, Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Card } from "./ui/Card";
 import { Accordion } from "./ui/Accordion";
 import { SubmissionHeader } from "./ui/SubmissionHeader";
@@ -38,6 +38,7 @@ export function MainLayout({
   const submissionViewRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [emailCopied, setEmailCopied] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const submissionActions = useSubmissionActions(
     currentBase,
@@ -80,6 +81,11 @@ export function MainLayout({
   const approvedSubmissions = submissions.filter(s => s.approved);
   const rejectedSubmissions = submissions.filter(s => s.rejected);
 
+  const handleSubmissionClick = (submission: YswsSubmission) => {
+    onSubmissionSelect(submission);
+    setSidebarOpen(false);
+  };
+
   const renderSubmissionList = (submissions: YswsSubmission[]) => (
     <div className="divide-y divide-base-content/5">
       {submissions.map((submission, index) => {
@@ -89,7 +95,7 @@ export function MainLayout({
         return (
           <button
             key={index}
-            onClick={() => onSubmissionSelect(submission)}
+            onClick={() => handleSubmissionClick(submission)}
             className={`w-full p-4 text-left transition-colors cursor-pointer flex items-center gap-3 rounded-lg ${
               isSelected 
                 ? "bg-primary bg-opacity-10 border-r-2 border-primary" 
@@ -161,50 +167,86 @@ export function MainLayout({
     );
   }
 
-  return (
-    <div className="flex h-full">
-      <div className="w-80 bg-base-100 border-r border-base-content/5 overflow-y-auto">        
-        <div>
-          <Accordion title={
-            <div className="flex items-center gap-3">
-              <span>Pending</span>
-              <div className="badge badge-warning">{pendingSubmissions.length}</div>
-            </div>
-          } defaultOpen={true}>
-            {renderSubmissionList(pendingSubmissions)}
-          </Accordion>
-          
-          <Accordion title={
-            <div className="flex items-center gap-3">
-              <span>Approved</span>
-              <div className="badge badge-success">{approvedSubmissions.length}</div>
-            </div>
-          } defaultOpen={false}>
-            {renderSubmissionList(approvedSubmissions)}
-          </Accordion>
-
-          {rejectedSubmissions.length > 0 && (
-            <Accordion title={
-              <div className="flex items-center gap-3">
-                <span>Rejected</span>
-                <div className="badge badge-error">{rejectedSubmissions.length}</div>
-              </div>
-            } defaultOpen={false}>
-              {renderSubmissionList(rejectedSubmissions)}
-            </Accordion>
-          )}
-
-          {submissions.length === 0 && (
-            <div className="p-8 text-center text-base-content/70">
-              No submissions found
-            </div>
-          )}
+  const sidebarContent = (
+    <div>
+      <Accordion title={
+        <div className="flex items-center gap-3">
+          <span>Pending</span>
+          <div className="badge badge-warning">{pendingSubmissions.length}</div>
         </div>
+      } defaultOpen={true}>
+        {renderSubmissionList(pendingSubmissions)}
+      </Accordion>
+      
+      <Accordion title={
+        <div className="flex items-center gap-3">
+          <span>Approved</span>
+          <div className="badge badge-success">{approvedSubmissions.length}</div>
+        </div>
+      } defaultOpen={false}>
+        {renderSubmissionList(approvedSubmissions)}
+      </Accordion>
+
+      {rejectedSubmissions.length > 0 && (
+        <Accordion title={
+          <div className="flex items-center gap-3">
+            <span>Rejected</span>
+            <div className="badge badge-error">{rejectedSubmissions.length}</div>
+          </div>
+        } defaultOpen={false}>
+          {renderSubmissionList(rejectedSubmissions)}
+        </Accordion>
+      )}
+
+      {submissions.length === 0 && (
+        <div className="p-8 text-center text-base-content/70">
+          No submissions found
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="flex h-full relative">
+      {/* Mobile menu button */}
+      <button
+        className="lg:hidden fixed bottom-4 right-4 z-50 btn btn-circle btn-primary btn-lg shadow-lg"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label={sidebarOpen ? "Close menu" : "Open menu"}
+      >
+        {sidebarOpen ? <XMarkIcon className="w-6 h-6" /> : <Bars3Icon className="w-6 h-6" />}
+      </button>
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - hidden on mobile unless open, always visible on desktop */}
+      <div className={`
+        fixed lg:static inset-y-0 left-0 z-40
+        w-[85vw] sm:w-80 bg-base-100 border-r border-base-content/5 overflow-y-auto
+        transform transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+      `}>
+        <div className="lg:hidden flex items-center justify-between p-4 border-b border-base-content/10">
+          <span className="font-semibold">Submissions</span>
+          <button 
+            className="btn btn-ghost btn-sm btn-circle"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+        {sidebarContent}
       </div>
 
       <div className="flex-1 overflow-y-auto" ref={submissionViewRef}>
         {selectedSubmission ? (
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             <div>
               <Card className="mb-1 border border-base-content/10 rounded-2xl">
                 {selectedSubmission.screenshotUrl && (
