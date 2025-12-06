@@ -148,7 +148,12 @@ function App() {
       const restoredSubmission = hashRecordId 
         ? submissions.find(s => s.recordId === hashRecordId)
         : undefined;
-      setSelectedSubmission(restoredSubmission ?? (submissions.length > 0 ? submissions[0] : undefined));
+      const pendingSubmissions = submissions.filter(s => !s.approved && !s.rejected);
+      const autoSelected = restoredSubmission ?? (pendingSubmissions.length > 0 ? pendingSubmissions[0] : submissions[0]);
+      setSelectedSubmission(autoSelected);
+      if (autoSelected) {
+        window.location.hash = autoSelected.recordId;
+      }
     } catch (error) {
       setSubmissionsError(error instanceof Error ? error.message : "Failed to fetch submissions");
     } finally {
