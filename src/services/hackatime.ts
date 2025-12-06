@@ -236,7 +236,7 @@ export interface HeartbeatCluster {
   heartbeats: Heartbeat[];
 }
 
-export const CLUSTER_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+export const CLUSTER_THRESHOLD_MS = 15 * 60 * 1000;
 
 export function clusterHeartbeats(heartbeats: Heartbeat[]): HeartbeatCluster[] {
     if (heartbeats.length === 0)
