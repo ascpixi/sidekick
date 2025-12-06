@@ -108,7 +108,6 @@ export class YswsSubmission {
     this._rejected = data.rejected;
   }
 
-  // Getters for the writable fields
   get hoursSpent(): number {
     return this._hoursSpent;
   }
@@ -129,12 +128,10 @@ export class YswsSubmission {
     return this._rejected;
   }
 
-  // Method to set the AirtableService instance (needed for updates)
   setAirtableService(service: import("../services/airtable").AirtableService): void {
     this.airtableService = service;
   }
 
-  // Update method that accepts partial writable fields
   async update(fields: WritableSubmissionFields): Promise<void> {
     if (!this.airtableService) {
       throw new Error("AirtableService not set. Cannot update submission.");
@@ -154,7 +151,6 @@ export class YswsSubmission {
       airtableFields["Automation - Submit to Unified YSWS"] = fields.approved;
     }
 
-    // Send update to Airtable
     await this.airtableService.updateSubmission(
       this._baseId,
       this._tableName,
@@ -162,7 +158,6 @@ export class YswsSubmission {
       airtableFields
     );
 
-    // Update internal state
     if (fields.hoursSpent !== undefined) {
       this._hoursSpent = fields.hoursSpent;
     }
@@ -174,7 +169,6 @@ export class YswsSubmission {
     }
   }
 
-  // Method to update custom fields (like rejection column)
   async updateCustomField(fieldName: string, value: boolean | string | number, isRejectionField = false): Promise<void> {
     if (!this.airtableService) {
       throw new Error("AirtableService not set. Cannot update submission.");
@@ -184,7 +178,6 @@ export class YswsSubmission {
       [fieldName]: value
     };
 
-    // Send update to Airtable
     await this.airtableService.updateSubmission(
       this._baseId,
       this._tableName,
@@ -192,7 +185,6 @@ export class YswsSubmission {
       airtableFields
     );
 
-    // Update local state if this is a rejection field
     if (isRejectionField && typeof value === "boolean") {
       this._rejected = value;
     }
@@ -250,4 +242,80 @@ export interface AppConfig {
   bases: AirtableBase[];
   selectedBaseId?: string;
   baseSettings?: Record<string, BaseSettings>; // Key is baseId
+}
+
+export function transformAirtableSubmission(
+  raw: RawAirtableSubmission, 
+  recordId: string, 
+  baseId: string, 
+  tableName: string,
+  rejectedColumn?: string,
+  hackatimeProjectsColumn?: string
+): YswsSubmission {
+  return new YswsSubmission(baseId, tableName, recordId, {
+    codeUrl: raw["Code URL"] || "",
+    demoUrl: raw["Playable URL"] || "",
+    howDidYouHearAboutThis: raw["How did you hear about this?"] || "",
+    whatAreWeDoingWell: raw["What are we doing well?"] || "",
+    howCanWeImprove: raw["How can we improve?"] || "",
+    authorFirstName: raw["First Name"] || "",
+    authorLastName: raw["Last Name"] || "",
+    authorEmail: raw["Email"] || "",
+    screenshotUrl: raw["Screenshot"] || "",
+    screenshotWidth: raw["Screenshot Width"],
+    screenshotHeight: raw["Screenshot Height"],
+    description: raw["Description"] || "",
+    authorGithub: (raw["GitHub Username"] || "").replace(/^@/, ""),
+    authorAddress1: raw["Address (Line 1)"] || "",
+    authorAddress2: raw["Address (Line 2)"] || "",
+    authorCity: raw["City"] || "",
+    authorState: raw["State / Province"] || "",
+    authorCountry: raw["Country"] || "",
+    authorZip: raw["ZIP / Postal Code"] || "",
+    authorBirthday: raw["Birthday"] || "",
+    hoursSpent: parseFloat(raw["Optional - Override Hours Spent"]) || 0,
+    hoursSpentJustification: raw["Optional - Override Hours Spent Justification"] || "",
+    hackatimeProjectKeys: hackatimeProjectsColumn ? (raw as unknown as Record<string, unknown>)[hackatimeProjectsColumn] as string || "" : "",
+    approved: !!raw["Automation - YSWS Record ID"],
+    rejected: rejectedColumn ? !!(raw as unknown as Record<string, unknown>)[rejectedColumn] : false,
+    automationError: raw["Automation - Error"] || "",
+    approvedOn: raw["Automation - First Submitted At"] ? new Date(raw["Automation - First Submitted At"]) : null,
+    yswsDbRecordId: raw["Automation - YSWS Record ID"] || ""
+  });
+}
+
+export function getSubmissionTitle(submission: YswsSubmission): string {
+  if (!submission.codeUrl) {
+    return `${submission.authorFirstName} ${submission.authorLastName}`;
+  }
+  
+  if (submission.codeUrl.includes("github.com/")) {
+    return submission.codeUrl.replace(/^https?:\/\/github\.com\//, "");
+  }
+  
+  return submission.codeUrl;
+}
+
+export function formatAddress(submission: YswsSubmission): string[] {
+  const addressParts: string[] = [];
+  
+  if (submission.authorAddress1) {
+    addressParts.push(submission.authorAddress1);
+  }
+  if (submission.authorAddress2) {
+    addressParts.push(submission.authorAddress2);
+  }
+  
+  const cityStateZip = [submission.authorCity, submission.authorState, submission.authorZip]
+    .filter(Boolean)
+    .join(", ");
+  
+  if (cityStateZip) {
+    addressParts.push(cityStateZip);
+  }
+  if (submission.authorCountry) {
+    addressParts.push(submission.authorCountry);
+  }
+  
+  return addressParts;
 }
