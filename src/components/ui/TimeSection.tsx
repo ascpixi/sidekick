@@ -1,5 +1,9 @@
 import { ClockIcon } from "@heroicons/react/24/outline";
 import { Accordion } from "./Accordion";
+import { HeartbeatGraph } from "./HeartbeatGraph";
+import { useState, useMemo, useEffect } from "react";
+import { clusterHeartbeats, type Heartbeat } from "../../utils/heartbeatClustering";
+import type { HeartbeatLoadingProgress } from "../../hooks/useHeartbeatData";
 
 export function TimeSection({
   localHoursSpent,
@@ -9,7 +13,11 @@ export function TimeSection({
   onHoursSpentJustificationChange,
   onHackatimeProjectKeysChange,
   onSyncFromHackatime,
-  hasHackatimeIntegration
+  hasHackatimeIntegration,
+  heartbeats = [],
+  heartbeatProgress,
+  isLoadingHeartbeats = false,
+  hackatimeUserId
 }: {
   localHoursSpent: number;
   localHoursSpentJustification: string;
@@ -19,7 +27,23 @@ export function TimeSection({
   onHackatimeProjectKeysChange: (value: string) => void;
   onSyncFromHackatime: () => void;
   hasHackatimeIntegration: boolean;
+  heartbeats?: Heartbeat[];
+  heartbeatProgress?: HeartbeatLoadingProgress | null;
+  isLoadingHeartbeats?: boolean;
+  hackatimeUserId?: number | null;
 }) {
+  const [currentClusterIndex, setCurrentClusterIndex] = useState(0);
+
+  const clusters = useMemo(() => {
+    const allClusters = clusterHeartbeats(heartbeats);
+    const significantClusters = allClusters.filter(c => c.heartbeats.length > 10);
+    return significantClusters.length > 0 ? significantClusters : allClusters;
+  }, [heartbeats]);
+
+  useEffect(() => {
+    setCurrentClusterIndex(0);
+  }, [heartbeats]);
+
   return (
     <Accordion 
       title={
@@ -78,6 +102,19 @@ export function TimeSection({
             placeholder="Explain any adjustments to the calculated hours..."
           />
         </div>
+
+        {hasHackatimeIntegration && (heartbeats.length > 0 || isLoadingHeartbeats) && (
+          <div className="mt-6">
+            <HeartbeatGraph
+              clusters={clusters}
+              currentClusterIndex={currentClusterIndex}
+              onClusterChange={setCurrentClusterIndex}
+              isLoading={isLoadingHeartbeats}
+              progress={heartbeatProgress}
+              hackatimeUserId={hackatimeUserId}
+            />
+          </div>
+        )}
       </div>
     </Accordion>
   );
