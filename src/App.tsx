@@ -134,8 +134,9 @@ function App() {
       const rejectedColumn = config.baseSettings?.[baseId]?.rejectedColumn;
       const hackatimeProjectsColumn = config.baseSettings?.[baseId]?.hackatimeProjectsColumn;
       const submissions = await airtableService.fetchSubmissions(
-        airtableBaseId, 
-        selectedBase.tableName, 
+        airtableBaseId,
+        selectedBase.tableId!,
+        selectedBase.tableName!, 
         selectedBase.viewId,
         rejectedColumn,
         hackatimeProjectsColumn

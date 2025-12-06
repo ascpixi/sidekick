@@ -7,6 +7,7 @@ export interface WritableSubmissionFields {
 export class YswsSubmission {
   private airtableService: import("../services/airtable").AirtableService | null = null;
   private _baseId: string;
+  private _tableId: string;
   private _tableName: string;
   
   readonly recordId: string;
@@ -42,6 +43,7 @@ export class YswsSubmission {
 
   constructor(
     baseId: string,
+    tableId: string,
     tableName: string,
     recordId: string,
     data: {
@@ -76,6 +78,7 @@ export class YswsSubmission {
     }
   ) {
     this._baseId = baseId;
+    this._tableId = tableId;
     this._tableName = tableName;
     this.recordId = recordId;
     this.codeUrl = data.codeUrl;
@@ -126,6 +129,10 @@ export class YswsSubmission {
 
   get rejected(): boolean {
     return this._rejected;
+  }
+
+  get airtableUrl(): string {
+    return `https://airtable.com/${this._baseId}/${this._tableId}/${this.recordId}`;
   }
 
   setAirtableService(service: import("../services/airtable").AirtableService): void {
@@ -247,12 +254,13 @@ export interface AppConfig {
 export function transformAirtableSubmission(
   raw: RawAirtableSubmission, 
   recordId: string, 
-  baseId: string, 
+  baseId: string,
+  tableId: string,
   tableName: string,
   rejectedColumn?: string,
   hackatimeProjectsColumn?: string
 ): YswsSubmission {
-  return new YswsSubmission(baseId, tableName, recordId, {
+  return new YswsSubmission(baseId, tableId, tableName, recordId, {
     codeUrl: raw["Code URL"] || "",
     demoUrl: raw["Playable URL"] || "",
     howDidYouHearAboutThis: raw["How did you hear about this?"] || "",

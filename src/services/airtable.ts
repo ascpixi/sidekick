@@ -66,7 +66,7 @@ export class AirtableService {
     return await response.json();
   }
 
-  async fetchSubmissions(baseId: string, tableName: string, viewId?: string, rejectedColumn?: string, hackatimeProjectsColumn?: string): Promise<YswsSubmission[]> {
+  async fetchSubmissions(baseId: string, tableId: string, tableName: string, viewId?: string, rejectedColumn?: string, hackatimeProjectsColumn?: string): Promise<YswsSubmission[]> {
     if (!this.accessToken) 
       throw new Error("Airtable access token is required");
 
@@ -93,10 +93,10 @@ export class AirtableService {
       offset = data.offset;
     } while (offset);
 
-    return records.map((record) => this.mapRecordToSubmission(record, baseId, tableName, rejectedColumn, hackatimeProjectsColumn));
+    return records.map((record) => this.mapRecordToSubmission(record, baseId, tableId, tableName, rejectedColumn, hackatimeProjectsColumn));
   }
 
-  private mapRecordToSubmission(record: AirtableRecord, baseId: string, tableName: string, rejectedColumn?: string, hackatimeProjectsColumn?: string): YswsSubmission {
+  private mapRecordToSubmission(record: AirtableRecord, baseId: string, tableId: string, tableName: string, rejectedColumn?: string, hackatimeProjectsColumn?: string): YswsSubmission {
     const fields = record.fields;
     
     const rawSubmission: RawAirtableSubmission = {
@@ -130,7 +130,7 @@ export class AirtableService {
       ...(hackatimeProjectsColumn && { [hackatimeProjectsColumn]: fields[hackatimeProjectsColumn] }),
     };
 
-    const submission = transformAirtableSubmission(rawSubmission, record.id, baseId, tableName, rejectedColumn, hackatimeProjectsColumn);
+    const submission = transformAirtableSubmission(rawSubmission, record.id, baseId, tableId, tableName, rejectedColumn, hackatimeProjectsColumn);
     submission.setAirtableService(this);
     return submission;
   }

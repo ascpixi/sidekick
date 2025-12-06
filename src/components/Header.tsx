@@ -60,7 +60,7 @@ export function Header({
         if (targetTable) {
           const rejectedColumn = baseSettings[base.id]?.rejectedColumn;
           const hackatimeProjectsColumn = baseSettings[base.id]?.hackatimeProjectsColumn;
-    const submissions = await airtableService.fetchSubmissions(baseId, targetTable.name, undefined, rejectedColumn, hackatimeProjectsColumn);
+    const submissions = await airtableService.fetchSubmissions(baseId, targetTable.id, targetTable.name, undefined, rejectedColumn, hackatimeProjectsColumn);
           // Only count pending submissions (not approved and not rejected)
           const pendingSubmissions = submissions.filter(submission => !submission.approved && !submission.rejected);
           counts[base.id] = pendingSubmissions.length;

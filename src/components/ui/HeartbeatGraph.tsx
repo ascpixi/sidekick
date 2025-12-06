@@ -537,21 +537,21 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
         <div role="tablist" className="tabs tabs-lift">
           <button
             role="tab"
-            className={`tab border-base-content/50! ${activeTab === "graph" ? "tab-active" : ""}`}
+            className={`tab border-base-content/20! ${activeTab === "graph" ? "tab-active" : ""}`}
             onClick={() => setActiveTab("graph")}
           >
             Graph View
           </button>
           <button
             role="tab"
-            className={`tab border-base-content/50! ${activeTab === "table" ? "tab-active" : ""}`}
+            className={`tab border-base-content/20! ${activeTab === "table" ? "tab-active" : ""}`}
             onClick={() => setActiveTab("table")}
           >
             Table View
           </button>
           <button
             role="tab"
-            className={`tab border-base-content/50! ${activeTab === "delta" ? "tab-active" : ""}`}
+            className={`tab border-base-content/20! ${activeTab === "delta" ? "tab-active" : ""}`}
             onClick={() => setActiveTab("delta")}
           >
             Delta Plot
@@ -563,7 +563,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
               href={`https://billy.3kh0.net/?u=${encodeURIComponent(hackatimeUserId)}&d=${clusters[0].startTime.toISOString().split("T")[0]}-${clusters[clusters.length - 1].endTime.toISOString().split("T")[0]}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn btn-sm btn-outline"
+              className="btn btn-sm btn-outline border-base-content/20"
             >
               Inspect in Billy
             </a>
@@ -571,7 +571,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
               href={`https://billy.3kh0.net/?u=${encodeURIComponent(hackatimeUserId)}&d=${currentCluster.startTime.toISOString().split("T")[0]}-${currentCluster.endTime.toISOString().split("T")[0]}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn btn-sm btn-outline"
+              className="btn btn-sm btn-outline border-base-content/20"
             >
               Inspect cluster in Billy
             </a>

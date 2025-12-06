@@ -1,4 +1,4 @@
-import { CheckIcon, XMarkIcon, BanknotesIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, XMarkIcon, BanknotesIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import type { YswsSubmission } from "../../types/submission";
 
 export function ActionButtons({
@@ -20,31 +20,50 @@ export function ActionButtons({
   onSendGrant: () => void;
   hcbOrgName?: string;
 }) {
+  const airtableButton = (
+    <a
+      href={submission.airtableUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="btn btn-ghost btn-md border border-base-content/20"
+      title="Open in Airtable"
+    >
+      <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+      Open in Airtable
+    </a>
+  );
+
   if (submission.approved && hcbOrgName) {
     return (
-      <button onClick={onSendGrant} className="btn btn-primary btn-md">
+      <>
+        <button onClick={onSendGrant} className="btn btn-primary btn-md">
           <BanknotesIcon className="h-4 w-4" />
-        Send HCB grant
-      </button>
+          Send HCB grant
+        </button>
+        {airtableButton}
+      </>
     );
   }
 
   if (submission.rejected) {
     return (
-      <button 
-        onClick={onUndoRejection}
-        disabled={isRejecting}
-        className="btn btn-outline btn-sm"
-      >
-        {isRejecting ? (
-          <>
-            <span className="loading loading-spinner loading-xs"></span>
-            Undoing...
-          </>
-        ) : (
-          "Undo verdict"
-        )}
-      </button>
+      <>
+        <button 
+          onClick={onUndoRejection}
+          disabled={isRejecting}
+          className="btn btn-outline btn-sm"
+        >
+          {isRejecting ? (
+            <>
+              <span className="loading loading-spinner loading-xs"></span>
+              Undoing...
+            </>
+          ) : (
+            "Undo verdict"
+          )}
+        </button>
+        {airtableButton}
+      </>
     );
   }
 
@@ -85,9 +104,10 @@ export function ActionButtons({
             </>
           )}
         </button>
+        {airtableButton}
       </>
     );
   }
 
-  return null;
+  return airtableButton;
 }
