@@ -1,5 +1,4 @@
-import { YswsSubmission, type BaseSettings, type AirtableBase } from "../types/submission";
-import { getSubmissionTitle } from "../utils/submission";
+import { YswsSubmission, type BaseSettings, type AirtableBase, getSubmissionTitle } from "../types/submission";
 import { EnvelopeIcon, CodeBracketIcon, ExclamationTriangleIcon, NoSymbolIcon } from "@heroicons/react/24/outline";
 import { Card } from "./ui/Card";
 import { Accordion } from "./ui/Accordion";
@@ -12,6 +11,7 @@ import { ImagePreview } from "./ui/ImagePreview";
 import { useSubmissionActions } from "../hooks/useSubmissionActions";
 import { useSubmissionData } from "../hooks/useSubmissionData";
 import { useHeartbeatData } from "../hooks/useHeartbeatData";
+import { TrustAlert } from "./ui/TrustAlert";
 import { useRef, useEffect, useState } from "react";
 
 export function MainLayout({ 
@@ -62,6 +62,7 @@ export function MainLayout({
       submissionViewRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [selectedSubmission]);
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -244,17 +245,21 @@ export function MainLayout({
                 </div>
 
                 {heartbeatData.trustLevel === "yellow" && (
-                  <div role="alert" className="alert alert-warning mt-3">
-                    <ExclamationTriangleIcon className="h-6 w-6 shrink-0 stroke-current" />
-                    <span>This user is a sussy baka.</span>
-                  </div>
+                  <TrustAlert
+                    variant="warning"
+                    icon={<ExclamationTriangleIcon className="h-6 w-6 shrink-0 stroke-current" />}
+                    message="This user is a sussy baka."
+                    trustLogs={heartbeatData.trustLogs}
+                  />
                 )}
 
                 {heartbeatData.trustLevel === "red" && (
-                  <div role="alert" className="alert alert-error mt-3">
-                    <NoSymbolIcon className="h-6 w-6 shrink-0 stroke-current" />
-                    <span>This user has been banished to the shadow realm.</span>
-                  </div>
+                  <TrustAlert
+                    variant="error"
+                    icon={<NoSymbolIcon className="h-6 w-6 shrink-0 stroke-current" />}
+                    message="This user has been banished to the shadow realm."
+                    trustLogs={heartbeatData.trustLogs}
+                  />
                 )}
               </Card>
 
