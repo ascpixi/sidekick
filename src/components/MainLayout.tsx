@@ -1,6 +1,6 @@
 import { YswsSubmission, type BaseSettings, type AirtableBase } from "../types/submission";
 import { getSubmissionTitle } from "../utils/submission";
-import { EnvelopeIcon, CodeBracketIcon } from "@heroicons/react/24/outline";
+import { EnvelopeIcon, CodeBracketIcon, ExclamationTriangleIcon, NoSymbolIcon } from "@heroicons/react/24/outline";
 import { Card } from "./ui/Card";
 import { Accordion } from "./ui/Accordion";
 import { SubmissionHeader } from "./ui/SubmissionHeader";
@@ -11,6 +11,7 @@ import { FeedbackSection } from "./ui/FeedbackSection";
 import { ImagePreview } from "./ui/ImagePreview";
 import { useSubmissionActions } from "../hooks/useSubmissionActions";
 import { useSubmissionData } from "../hooks/useSubmissionData";
+import { useHeartbeatData } from "../hooks/useHeartbeatData";
 import { useRef, useEffect, useState } from "react";
 
 export function MainLayout({ 
@@ -36,6 +37,7 @@ export function MainLayout({
 }) {
   const submissionViewRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
   
   const submissionActions = useSubmissionActions(
     currentBase,
@@ -45,6 +47,15 @@ export function MainLayout({
   );
 
   const submissionData = useSubmissionData(selectedSubmission, onSubmissionUpdate);
+  const heartbeatData = useHeartbeatData(selectedSubmission, hackatimeAdminKey);
+
+  const handleCopyEmail = () => {
+    if (selectedSubmission?.authorEmail) {
+      navigator.clipboard.writeText(selectedSubmission.authorEmail);
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 2000);
+    }
+  };
 
   useEffect(() => {
     if (selectedSubmission && submissionViewRef.current) {
@@ -220,15 +231,31 @@ export function MainLayout({
                   )}
                   
                   {selectedSubmission.authorEmail && (
-                    <a 
-                      href={`mailto:${selectedSubmission.authorEmail}`}
-                      className="link link-hover text-base-content/70 flex items-center gap-2"
-                    >
-                      <EnvelopeIcon className="w-4 h-4" />
-                      {selectedSubmission.authorEmail}
-                    </a>
+                    <div className="tooltip w-min" data-tip={emailCopied ? "Copied!" : "Click to copy"}>
+                      <button 
+                        onClick={handleCopyEmail}
+                        className="link link-hover text-base-content/70 flex items-center gap-2 text-left"
+                      >
+                        <EnvelopeIcon className="w-4 h-4" />
+                        {selectedSubmission.authorEmail}
+                      </button>
+                    </div>
                   )}
                 </div>
+
+                {heartbeatData.trustLevel === "yellow" && (
+                  <div role="alert" className="alert alert-warning mt-3">
+                    <ExclamationTriangleIcon className="h-6 w-6 shrink-0 stroke-current" />
+                    <span>This user is a sussy baka.</span>
+                  </div>
+                )}
+
+                {heartbeatData.trustLevel === "red" && (
+                  <div role="alert" className="alert alert-error mt-3">
+                    <NoSymbolIcon className="h-6 w-6 shrink-0 stroke-current" />
+                    <span>This user has been banished to the shadow realm.</span>
+                  </div>
+                )}
               </Card>
 
               <TimeSection
@@ -250,6 +277,10 @@ export function MainLayout({
                   }
                 )}
                 hasHackatimeIntegration={!!(currentBase && baseSettings[currentBase.id]?.hackatimeProjectsColumn)}
+                heartbeats={heartbeatData.heartbeats}
+                heartbeatProgress={heartbeatData.progress}
+                isLoadingHeartbeats={heartbeatData.isLoading}
+                hackatimeUserId={heartbeatData.hackatimeUserId}
               />
 
               <SubmissionDetails
