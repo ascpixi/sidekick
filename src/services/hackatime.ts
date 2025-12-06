@@ -9,6 +9,33 @@ export type HackatimeAdminLevel =
     "admin" |
     "viewer";
 
+interface RawHackatimeHeartbeat {
+    branch: string;
+    category: string;
+    created_at: string;
+    cursorpos: number;
+    dependencies: string[];
+    editor: string;
+    entity: string;
+    id: number;
+    ip_address: string;
+    is_write: boolean | null;
+    language: string;
+    line_additions: number | null;
+    line_deletions: number | null;
+    lineno: number;
+    lines: number;
+    machine: string;
+    operating_system: string;
+    project: string;
+    project_root_count: number;
+    source_type: "direct_entry" | "wakapi_import" | "test_entry";
+    time: string; // date
+    type: string;
+    user_agent: string;
+    ysws_program: string;
+}
+
 export class HackatimeService {
     private apiKey: string;
 
@@ -125,5 +152,25 @@ export class HackatimeService {
         );
 
         return res.user;
+    }
+
+    async getHeartbeatsFor(userId: number, date: Date) {
+        const res = await this.query<{
+            date: string;
+            heartbeats: RawHackatimeHeartbeat[];
+            timezone: string;
+            total_duration: number;
+            total_heartbeats: number;
+            user_id: number;
+            username: string;
+        }>(
+            "GET", `admin/v1/user/stats?id=${userId}&date=${date.getUTCFullYear()}-${(date.getUTCMonth() + 1).toString().padStart(2, "0")}-${date.getUTCDate().toString().padStart(2, "0")}`
+        );
+
+        return res.heartbeats.map(x => ({
+            ...x,
+            created_at: new Date(x.created_at),
+            time: new Date(x.time)
+        }));
     }
 }
