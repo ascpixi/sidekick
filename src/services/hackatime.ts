@@ -24,6 +24,13 @@ export interface HackatimeTrustLog {
     };
 }
 
+function areTrustLogsEquivalent(a: HackatimeTrustLog, b: HackatimeTrustLog) {
+    return (
+        (a.notes == b.notes && a.reason == b.reason) ||
+        a.created_at == b.created_at
+    );
+}
+
 export class HackatimeService {
     private apiKey: string;
 
@@ -189,7 +196,12 @@ export class HackatimeService {
 
     async getTrustLogs(userId: number) {
         const res = await this.query<{ trust_logs: HackatimeTrustLog[] }>("GET", `admin/v1/user/trust_logs?id=${userId}`);
-        return res.trust_logs;
+
+        return res.trust_logs
+            .filter(
+                // We sometimes can have duplicate entries, for some reason...
+                (x, i) => res.trust_logs.findIndex(y => areTrustLogsEquivalent(x, y)) == i
+            );
     }
 }
 
