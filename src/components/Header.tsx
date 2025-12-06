@@ -56,7 +56,7 @@ export function Header({
             table.name.toLowerCase() !== "ysws config"
           );
         }
-        
+
         if (targetTable) {
           const rejectedColumn = baseSettings[base.id]?.rejectedColumn;
           const hackatimeProjectsColumn = baseSettings[base.id]?.hackatimeProjectsColumn;
@@ -88,7 +88,6 @@ export function Header({
       
       if (response.ok) {
         const data = await response.json();
-        // Filter bases that contain "YSWS" in the name
         const ywswsBases = data.bases.filter((base: AirtableApiBase) =>
           base.name.toLowerCase().includes("ysws")
         );
@@ -108,8 +107,7 @@ export function Header({
     onAddBase(base.id, base.name, baseUrl);
     setIsAddingBase(false);
     setSearchTerm("");
-    
-    // Auto-open settings modal for new base
+
     setTimeout(() => {
       setSettingsBaseId(base.id);
       setIsSettingsModalOpen(true);
@@ -131,26 +129,19 @@ export function Header({
     onBaseSettingsUpdate(baseId, settings);
   }
 
-  // Auto-select first base if none selected and bases exist
   const currentBase = selectedBaseId ? bases.find(base => base.id === selectedBaseId) : bases[0];
-  
 
-  
-  // Force modal if no bases exist
   const shouldForceModal = bases.length === 0;
   const showModal = isAddingBase || shouldForceModal;
 
-  // Fetch available bases whenever the modal is shown
   useEffect(() => {
     if (showModal) {
       fetchAvailableBases();
     }
   }, [showModal, airtablePAT, fetchAvailableBases]);
 
-  // Fetch submission counts for existing bases
   useEffect(() => {
     if (bases.length > 0 && airtablePAT) {
-      // Convert existing bases to the format expected by fetchSubmissionCounts
       const basesToCheck: AirtableApiBase[] = bases.map(base => ({
         id: base.id,
         name: base.name,
@@ -178,7 +169,6 @@ export function Header({
                 <button 
                   onClick={() => {
                     onBaseSelect(base.id);
-                    // Close dropdown by removing focus
                     const activeElement = document.activeElement as HTMLElement;
                     activeElement?.blur();
                   }}
