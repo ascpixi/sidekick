@@ -321,9 +321,12 @@ export function MainLayout({
       {submissionActions.showRejectionPrompt && (
         <div className="modal modal-open">
           <div className="modal-box">
-            <h3 className="font-bold text-lg">Rejection Column Not Configured</h3>
+            <h3 className="font-bold text-lg flex items-center gap-2">
+              <ExclamationTriangleIcon className="w-6 h-6" />
+              And I oop-
+            </h3>
             <p className="py-4">
-              To reject submissions, you need to configure a rejection column. Please go to the base settings and set up a rejection column first.
+              To reject submissions, you need to configure a rejection column. Click "Configure" on the header!
             </p>
             <div className="modal-action">
               <button 
