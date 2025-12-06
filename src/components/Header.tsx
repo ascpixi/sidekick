@@ -228,7 +228,16 @@ export function Header({
 
       {showModal && (
         <div className="modal modal-open">
-          <div className="modal-box max-w-2xl p-12">
+          <div className="modal-box max-w-2xl p-12 relative">
+            {!shouldForceModal && (
+              <button
+                type="button"
+                className="btn btn-sm btn-circle btn-ghost absolute right-4 top-4"
+                onClick={() => setIsAddingBase(false)}
+              >
+                ✕
+              </button>
+            )}
             <ModalHeader
               title={shouldForceModal ? "Select Your First YSWS Base" : "Select a YSWS Base"}
               subtitle={shouldForceModal ? "You need to add at least one YSWS base to get started." : undefined}
