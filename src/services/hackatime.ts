@@ -9,31 +9,19 @@ export type HackatimeAdminLevel =
     "admin" |
     "viewer";
 
-interface RawHackatimeHeartbeat {
-    branch: string;
-    category: string;
-    created_at: string;
-    cursorpos: number;
-    dependencies: string[];
-    editor: string;
-    entity: string;
+export interface HackatimeTrustLog {
     id: number;
-    ip_address: string;
-    is_write: boolean | null;
-    language: string;
-    line_additions: number | null;
-    line_deletions: number | null;
-    lineno: number;
-    lines: number;
-    machine: string;
-    operating_system: string;
-    project: string;
-    project_root_count: number;
-    source_type: "direct_entry" | "wakapi_import" | "test_entry";
-    time: string; // date
-    type: string;
-    user_agent: string;
-    ysws_program: string;
+    previous_trust_level: HackatimeTrustLevel;
+    new_trust_level: HackatimeTrustLevel;
+    reason: string;
+    notes: string;
+    created_at: string;
+    changed_by: {
+        id: number;
+        username: string | null;
+        display_name: string;
+        admin_level: HackatimeAdminLevel;
+    };
 }
 
 export class HackatimeService {
@@ -157,12 +145,37 @@ export class HackatimeService {
     async getHeartbeatsFor(userId: number, date: Date) {
         const res = await this.query<{
             date: string;
-            heartbeats: RawHackatimeHeartbeat[];
             timezone: string;
             total_duration: number;
             total_heartbeats: number;
             user_id: number;
             username: string;
+            heartbeats: {
+                branch: string;
+                category: string;
+                created_at: string;
+                cursorpos: number;
+                dependencies: string[];
+                editor: string;
+                entity: string;
+                id: number;
+                ip_address: string;
+                is_write: boolean | null;
+                language: string;
+                line_additions: number | null;
+                line_deletions: number | null;
+                lineno: number;
+                lines: number;
+                machine: string;
+                operating_system: string;
+                project: string;
+                project_root_count: number;
+                source_type: "direct_entry" | "wakapi_import" | "test_entry";
+                time: string; // date
+                type: string;
+                user_agent: string;
+                ysws_program: string;
+            }[];
         }>(
             "GET", `admin/v1/user/stats?id=${userId}&date=${date.getUTCFullYear()}-${(date.getUTCMonth() + 1).toString().padStart(2, "0")}-${date.getUTCDate().toString().padStart(2, "0")}`
         );
@@ -173,4 +186,85 @@ export class HackatimeService {
             time: new Date(x.time)
         }));
     }
+
+    async getTrustLogs(userId: number) {
+        const res = await this.query<{ trust_logs: HackatimeTrustLog[] }>("GET", `admin/v1/user/trust_logs?id=${userId}`);
+        return res.trust_logs;
+    }
+}
+
+export interface Heartbeat {
+  time: Date;
+  created_at: Date;
+  project: string;
+  branch: string;
+  category: string;
+  editor: string;
+  entity: string;
+  language: string;
+  machine: string;
+  operating_system: string;
+  type: string;
+  user_agent: string;
+  line_additions: number | null;
+  line_deletions: number | null;
+  lineno: number;
+  lines: number;
+  cursorpos: number;
+  project_root_count: number;
+  is_write: boolean | null;
+  source_type: string;
+  ip_address: string;
+}
+
+export interface HeartbeatCluster {
+  id: string;
+  startTime: Date;
+  endTime: Date;
+  heartbeats: Heartbeat[];
+}
+
+export const CLUSTER_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+export function clusterHeartbeats(heartbeats: Heartbeat[]): HeartbeatCluster[] {
+    if (heartbeats.length === 0)
+        return [];
+
+    const sorted = [...heartbeats].sort((a, b) => a.time.getTime() - b.time.getTime());
+
+    const clusters: HeartbeatCluster[] = [];
+    let currentCluster: Heartbeat[] = [sorted[0]];
+    let lastTime = sorted[0].time.getTime();
+
+    for (let i = 1; i < sorted.length; i++) {
+        const currentTime = sorted[i].time.getTime();
+
+        if (currentTime - lastTime <= CLUSTER_THRESHOLD_MS) {
+            currentCluster.push(sorted[i]);
+        } else {
+            if (currentCluster.length > 0) {
+                clusters.push({
+                    id: `cluster-${clusters.length}`,
+                    startTime: currentCluster[0].time,
+                    endTime: currentCluster[currentCluster.length - 1].time,
+                    heartbeats: currentCluster
+                });
+            }
+
+            currentCluster = [sorted[i]];
+        }
+
+        lastTime = currentTime;
+    }
+
+    if (currentCluster.length > 0) {
+        clusters.push({
+            id: `cluster-${clusters.length}`,
+            startTime: currentCluster[0].time,
+            endTime: currentCluster[currentCluster.length - 1].time,
+            heartbeats: currentCluster
+        });
+    }
+
+    return clusters;
 }
