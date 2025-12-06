@@ -10,7 +10,6 @@ const STORAGE_KEY = "sidekick-config";
 
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(() => {
-    // Load config from localStorage on app start
     const savedConfig = localStorage.getItem(STORAGE_KEY);
     if (savedConfig) {
       try {
@@ -20,14 +19,15 @@ function App() {
         localStorage.removeItem(STORAGE_KEY);
       }
     }
+
     return null;
   });
+
   const [submissions, setSubmissions] = useState<YswsSubmission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<YswsSubmission | undefined>();
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [submissionsError, setSubmissionsError] = useState<string | null>(null);
 
-  // Save config to localStorage whenever it changes
   useEffect(() => {
     if (config) {
       console.log("Saving config to localStorage:", config);
@@ -62,9 +62,8 @@ function App() {
   }, []);
 
   const tryAutoConfigureTable = useCallback(async (baseId: string) => {
-    if (!config) 
-      return;
-    
+    if (!config) return;
+
     try {
       const airtableBaseId = AirtableService.extractBaseIdFromUrl(baseId) || baseId;
       const airtableService = new AirtableService(config.airtablePAT);
@@ -91,11 +90,9 @@ function App() {
   }, [config, handleUpdateBase]);
 
   const handleAddBase = useCallback((id: string, name: string, url: string) => {
-    if (!config) 
-      return;
-    
+    if (!config) return;
+
     const newBase: AirtableBase = { id, name, url };
-    
     setConfig({
       ...config,
       bases: [...config.bases, newBase],
@@ -106,20 +103,19 @@ function App() {
   }, [config, tryAutoConfigureTable]);
 
   const fetchSubmissions = useCallback(async (baseId: string) => {
-    if (!config) 
-      return;
-    
+    if (!config) return;
+
     const selectedBase = config.bases.find(base => base.id === baseId);
     if (!selectedBase) {
       setSubmissionsError("Base not found");
       return;
     }
-    
+
     if (!selectedBase.tableName) {
       setSubmissionsError("Please configure table and view for this base");
       return;
     }
-    
+
     setIsLoadingSubmissions(true);
     setSubmissionsError(null);
     setSubmissions([]);
@@ -127,8 +123,7 @@ function App() {
     
     try {
       const airtableBaseId = AirtableService.extractBaseIdFromUrl(selectedBase.url);
-      if (!airtableBaseId) 
-        throw new Error("Invalid Airtable base URL");
+      if (!airtableBaseId) throw new Error("Invalid Airtable base URL");
       
       const airtableService = new AirtableService(config.airtablePAT);
       const rejectedColumn = config.baseSettings?.[baseId]?.rejectedColumn;
@@ -142,12 +137,7 @@ function App() {
       );
       
       setSubmissions(submissions);
-      
-      if (submissions.length > 0) {
-        setSelectedSubmission(submissions[0]);
-      } else {
-        setSelectedSubmission(undefined);
-      }
+      setSelectedSubmission(submissions.length > 0 ? submissions[0] : undefined);
     } catch (error) {
       setSubmissionsError(error instanceof Error ? error.message : "Failed to fetch submissions");
     } finally {
@@ -155,10 +145,7 @@ function App() {
     }
   }, [config]);
 
-  const handleSubmissionUpdate = useCallback(() => {
-    // Force a re-render by updating the submissions array
-    setSubmissions(prev => [...prev]);
-  }, []);
+  const handleSubmissionUpdate = useCallback(() => setSubmissions(prev => [...prev]), []);
 
   useEffect(() => {
     if (config?.selectedBaseId) {
@@ -167,9 +154,8 @@ function App() {
   }, [config?.selectedBaseId, fetchSubmissions]);
 
   function handleBaseSelect(baseId: string) {
-    if (!config) 
-      return;
-    
+    if (!config) return;
+
     setConfig({
       ...config,
       selectedBaseId: baseId
@@ -180,7 +166,7 @@ function App() {
 
   const handleBaseSettingsUpdate = useCallback((baseId: string, settings: import("./types/submission").BaseSettings) => {
     if (!config) return;
-    
+
     setConfig({
       ...config,
       baseSettings: {
@@ -190,10 +176,7 @@ function App() {
     });
   }, [config]);
 
-  // If not authenticated, show auth setup
-  if (!config) {
-    return <AuthSetup onComplete={handleAuthComplete} />;
-  }
+  if (!config) return <AuthSetup onComplete={handleAuthComplete} />;
 
   return (
     <div className="h-screen flex flex-col">
