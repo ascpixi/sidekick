@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   PlayIcon,
   PauseIcon,
@@ -8,7 +8,7 @@ import {
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 import { githubService, parseGitHubUrl } from "../../services/github";
-import type { Heartbeat } from "../../utils/heartbeatClustering";
+import type { Heartbeat } from "../../services/hackatime";
 
 const CONTEXT_LINES = 10;
 
@@ -155,71 +155,80 @@ export function CodeView({ heartbeats, codeUrl }: CodeViewProps) {
   const [selectedFileGroup, setSelectedFileGroup] = useState<FileGroup | null>(
     null
   );
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [gitHubInfo, setGitHubInfo] = useState<{
-    owner: string;
-    repo: string;
-  } | null>(null);
+  const [fetchState, setFetchState] = useState<{
+    content: string | null;
+    isLoading: boolean;
+    error: string | null;
+    key: string | null;
+  }>({ content: null, isLoading: false, error: null, key: null });
   const codeContainerRef = useRef<HTMLPreElement>(null);
   const highlightedLineRef = useRef<HTMLDivElement>(null);
+
+  const gitHubInfo = useMemo(
+    () => (codeUrl ? parseGitHubUrl(codeUrl) : null),
+    [codeUrl]
+  );
 
   const { groups: fileGroups, projectRoot } = useMemo(
     () => groupHeartbeatsByFile(heartbeats),
     [heartbeats]
   );
 
-  useEffect(() => {
-    if (codeUrl) {
-      const parsed = parseGitHubUrl(codeUrl);
-      setGitHubInfo(parsed);
-    }
-  }, [codeUrl]);
+  const validSelectedGroup = selectedFileGroup && 
+    fileGroups.some(g => g.entity === selectedFileGroup.entity)
+    ? selectedFileGroup
+    : fileGroups[0] || null;
+
+  if (validSelectedGroup !== selectedFileGroup) {
+    setSelectedFileGroup(validSelectedGroup);
+    setCurrentIndex(0);
+  }
+
+  const fetchKey = selectedFileGroup && gitHubInfo
+    ? `${gitHubInfo.owner}/${gitHubInfo.repo}/${selectedFileGroup.relativePath}/${selectedFileGroup.heartbeats[0]?.branch || "main"}`
+    : null;
 
   useEffect(() => {
-    if (fileGroups.length > 0 && !selectedFileGroup) {
-      setSelectedFileGroup(fileGroups[0]);
-    }
-  }, [fileGroups, selectedFileGroup]);
-
-  useEffect(() => {
-    setSelectedFileGroup(null);
-  }, [heartbeats]);
-
-  useEffect(() => {
-    if (!selectedFileGroup || !gitHubInfo) {
-      setFileContent(null);
+    if (!selectedFileGroup || !gitHubInfo || !fetchKey) {
       return;
     }
 
-    const branch =
-      selectedFileGroup.heartbeats[0]?.branch || "main";
+    if (fetchState.key === fetchKey && !fetchState.isLoading) {
+      return;
+    }
+
+    let cancelled = false;
+    const branch = selectedFileGroup.heartbeats[0]?.branch || "main";
     const relativePath = selectedFileGroup.relativePath;
 
-    setIsLoadingContent(true);
-    setLoadError(null);
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setFetchState({ content: null, isLoading: true, error: null, key: fetchKey });
+    });
 
     githubService
       .getFileAtBranch(gitHubInfo.owner, gitHubInfo.repo, relativePath, branch)
       .then((content) => {
+        if (cancelled) return;
         if (content) {
-          setFileContent(content);
+          setFetchState({ content, isLoading: false, error: null, key: fetchKey });
         } else {
-          setLoadError(`Could not fetch file: ${relativePath}`);
+          setFetchState({ content: null, isLoading: false, error: `Could not fetch file: ${relativePath}`, key: fetchKey });
         }
       })
       .catch((err) => {
-        setLoadError(err.message);
-      })
-      .finally(() => {
-        setIsLoadingContent(false);
+        if (cancelled) return;
+        setFetchState({ content: null, isLoading: false, error: err.message, key: fetchKey });
       });
-  }, [selectedFileGroup, gitHubInfo]);
 
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [selectedFileGroup]);
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchKey, selectedFileGroup, gitHubInfo, fetchState.key, fetchState.isLoading]);
+
+  const fileContent = fetchState.key === fetchKey ? fetchState.content : null;
+  const isLoadingContent = fetchState.isLoading || (fetchKey !== null && fetchState.key !== fetchKey);
+  const loadError = fetchState.key === fetchKey ? fetchState.error : null;
 
   const currentHeartbeats = selectedFileGroup?.heartbeats || [];
   const currentHeartbeat = currentHeartbeats[currentIndex];
@@ -249,29 +258,24 @@ export function CodeView({ heartbeats, codeUrl }: CodeViewProps) {
     }
   }, [currentIndex, fileContent]);
 
-  const handlePrevious = useCallback(() => {
+  const handlePrevious = () => {
     setCurrentIndex((prev) => Math.max(0, prev - 1));
-  }, []);
+  };
 
-  const handleNext = useCallback(() => {
-    setCurrentIndex((prev) =>
-      Math.min(currentHeartbeats.length - 1, prev + 1)
-    );
-  }, [currentHeartbeats.length]);
+  const handleNext = () => {
+    setCurrentIndex((prev) => Math.min(currentHeartbeats.length - 1, prev + 1));
+  };
 
-  const handleSliderChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setCurrentIndex(parseInt(e.target.value, 10));
-    },
-    []
-  );
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCurrentIndex(parseInt(e.target.value, 10));
+  };
 
-  const togglePlayback = useCallback(() => {
+  const togglePlayback = () => {
     if (currentIndex >= currentHeartbeats.length - 1) {
       setCurrentIndex(0);
     }
     setIsPlaying((prev) => !prev);
-  }, [currentIndex, currentHeartbeats.length]);
+  };
 
   if (!gitHubInfo) {
     return (
