@@ -1,7 +1,6 @@
 import { UserIcon } from "@heroicons/react/24/outline";
 import { Accordion } from "./Accordion";
-import { YswsSubmission } from "../../types/submission";
-import { formatAddress } from "../../utils/submission";
+import { YswsSubmission, formatAddress } from "../../types/submission";
 
 export function FulfillmentInfo({ submission }: { submission: YswsSubmission }) {
   return (
