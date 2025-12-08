@@ -10,7 +10,8 @@ export interface HeartbeatLoadingProgress {
 
 export function useHeartbeatData(
   selectedSubmission?: YswsSubmission,
-  hackatimeApiKey?: string
+  hackatimeApiKey?: string,
+  allSubmissions?: YswsSubmission[]
 ) {
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,6 +20,7 @@ export function useHeartbeatData(
   const [hackatimeUserId, setHackatimeUserId] = useState<number | null>(null);
   const [trustLevel, setTrustLevel] = useState<HackatimeTrustLevel | null>(null);
   const [trustLogs, setTrustLogs] = useState<HackatimeTrustLog[]>([]);
+  const [aggregatedProjectHours, setAggregatedProjectHours] = useState<number | null>(null);
 
   const hackatimeService = useMemo(() => {
     if (!hackatimeApiKey) return null;
@@ -38,6 +40,7 @@ export function useHeartbeatData(
         setHeartbeats([]);
         setTrustLevel(null);
         setTrustLogs([]);
+        setAggregatedProjectHours(null);
         return;
       }
 
@@ -50,6 +53,7 @@ export function useHeartbeatData(
         setHeartbeats([]);
         setTrustLevel(null);
         setTrustLogs([]);
+        setAggregatedProjectHours(null);
         return;
       }
 
@@ -94,8 +98,25 @@ export function useHeartbeatData(
         if (projects.length === 0) {
           setError("No matching projects found");
           setHeartbeats([]);
+          setAggregatedProjectHours(null);
           return;
         }
+
+        const authorSubmissions = allSubmissions?.filter(
+          s => s.authorEmail?.toLowerCase() === selectedSubmission.authorEmail?.toLowerCase()
+        ) ?? [selectedSubmission];
+        
+        const allAuthorProjectKeys = new Set<string>();
+        for (const sub of authorSubmissions) {
+          const subKeys = sub.hackatimeProjectKeys?.split(/[,;]/).map(x => x.toLowerCase().trim()) ?? [];
+          for (const key of subKeys) {
+            if (key) allAuthorProjectKeys.add(key);
+          }
+        }
+        
+        const aggregateProjects = allProjects.projects.filter(x => allAuthorProjectKeys.has(x.name.toLowerCase()));
+        const totalSeconds = aggregateProjects.reduce((sum, p) => sum + p.total_duration, 0);
+        setAggregatedProjectHours(totalSeconds / 3600);
 
         let minTimestamp = Infinity;
         let maxTimestamp = -Infinity;
@@ -191,6 +212,7 @@ export function useHeartbeatData(
     progress,
     hackatimeUserId,
     trustLevel,
-    trustLogs
+    trustLogs,
+    aggregatedProjectHours
   };
 }

@@ -49,7 +49,7 @@ export function MainLayout({
   );
 
   const submissionData = useSubmissionData(selectedSubmission, onSubmissionUpdate);
-  const heartbeatData = useHeartbeatData(selectedSubmission, hackatimeAdminKey);
+  const heartbeatData = useHeartbeatData(selectedSubmission, hackatimeAdminKey, submissions);
 
   const handleCopyEmail = () => {
     if (selectedSubmission?.authorEmail) {
@@ -350,6 +350,7 @@ export function MainLayout({
                 heartbeatProgress={heartbeatData.progress}
                 isLoadingHeartbeats={heartbeatData.isLoading}
                 hackatimeUserId={heartbeatData.hackatimeUserId}
+                aggregatedProjectHours={heartbeatData.aggregatedProjectHours}
               />
 
               <SubmissionDetails

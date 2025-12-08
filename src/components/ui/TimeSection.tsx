@@ -1,7 +1,7 @@
 import { ClockIcon } from "@heroicons/react/24/outline";
 import { Accordion } from "./Accordion";
 import { HeartbeatGraph } from "./HeartbeatGraph";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { clusterHeartbeats, type Heartbeat } from "../../services/hackatime";
 import type { HeartbeatLoadingProgress } from "../../hooks/useHeartbeatData";
 
@@ -17,7 +17,8 @@ export function TimeSection({
   heartbeats = [],
   heartbeatProgress,
   isLoadingHeartbeats = false,
-  hackatimeUserId
+  hackatimeUserId,
+  aggregatedProjectHours
 }: {
   localHoursSpent: number;
   localHoursSpentJustification: string;
@@ -31,6 +32,7 @@ export function TimeSection({
   heartbeatProgress?: HeartbeatLoadingProgress | null;
   isLoadingHeartbeats?: boolean;
   hackatimeUserId?: number | null;
+  aggregatedProjectHours?: number | null;
 }) {
   const heartbeatsKey = heartbeats.length > 0 
     ? `${heartbeats.length}-${heartbeats[0]?.time ?? 0}` 
@@ -95,6 +97,15 @@ export function TimeSection({
               onChange={(e) => onHackatimeProjectKeysChange(e.target.value)}
               placeholder="comma-separated project names"
             />
+          </div>
+        )}
+
+        {hasHackatimeIntegration && aggregatedProjectHours != null && (
+          <div className="mb-4 flex items-center gap-2">
+            <label className="text-sm font-medium">YSWS aggregate</label>
+            <span className="text-sm font-mono bg-base-200 px-2 py-1 rounded">
+              {aggregatedProjectHours.toFixed(1)} hours
+            </span>
           </div>
         )}
 
