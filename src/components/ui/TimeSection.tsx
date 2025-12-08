@@ -51,6 +51,22 @@ export function TimeSection({
     return significantClusters.length > 0 ? significantClusters : allClusters;
   }, [heartbeats]);
 
+  const [hoursSpentInput, setHoursSpentInput] = useState(localHoursSpent.toString());
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setHoursSpentInput(localHoursSpent.toString());
+  }, [localHoursSpent]);
+
+  function handleHoursSpentChange(value: string) {
+    setHoursSpentInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const parsed = value === "" ? 0 : parseFloat(value);
+      onHoursSpentChange(isNaN(parsed) ? 0 : parsed);
+    }, 1000);
+  }
+
   return (
     <Accordion 
       title={
@@ -70,11 +86,8 @@ export function TimeSection({
             step="0.1"
             min="0"
             className="input input-bordered input-sm flex-1 !outline-none focus:border-primary"
-            value={localHoursSpent || ""}
-            onChange={(e) => {
-              const value = parseFloat(e.target.value) || 0;
-              onHoursSpentChange(value);
-            }}
+            value={hoursSpentInput}
+            onChange={(e) => handleHoursSpentChange(e.target.value)}
           />
           {hasHackatimeIntegration && (
             <button 
