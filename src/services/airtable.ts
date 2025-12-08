@@ -100,6 +100,7 @@ export class AirtableService {
     const fields = record.fields;
     
     const rawSubmission: RawAirtableSubmission = {
+      ...fields,
       "Code URL": (fields["Code URL"] as string) || "",
       "Playable URL": (fields["Playable URL"] as string) || "",
       "How did you hear about this?": (fields["How did you hear about this?"] as string) || "",

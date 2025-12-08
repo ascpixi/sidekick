@@ -40,6 +40,8 @@ export class YswsSubmission {
   private _hackatimeProjectKeys: string;
   private _approved: boolean;
   private _rejected: boolean;
+  
+  readonly auxiliaryFields: Record<string, unknown>;
 
   constructor(
     baseId: string,
@@ -75,6 +77,7 @@ export class YswsSubmission {
       automationError: string;
       approvedOn: Date | null;
       yswsDbRecordId: string;
+      auxiliaryFields: Record<string, unknown>;
     }
   ) {
     this._baseId = baseId;
@@ -109,6 +112,7 @@ export class YswsSubmission {
     this._hackatimeProjectKeys = data.hackatimeProjectKeys;
     this._approved = data.approved;
     this._rejected = data.rejected;
+    this.auxiliaryFields = data.auxiliaryFields;
   }
 
   get hoursSpent(): number {
@@ -251,6 +255,35 @@ export interface AppConfig {
   baseSettings?: Record<string, BaseSettings>; // Key is baseId
 }
 
+const KNOWN_AIRTABLE_FIELDS = new Set([
+  "Code URL",
+  "Playable URL",
+  "How did you hear about this?",
+  "What are we doing well?",
+  "How can we improve?",
+  "First Name",
+  "Last Name",
+  "Email",
+  "Screenshot",
+  "Screenshot Width",
+  "Screenshot Height",
+  "Description",
+  "GitHub Username",
+  "Address (Line 1)",
+  "Address (Line 2)",
+  "City",
+  "State / Province",
+  "Country",
+  "ZIP / Postal Code",
+  "Birthday",
+  "Optional - Override Hours Spent",
+  "Optional - Override Hours Spent Justification",
+  "Automation - Submit to Unified YSWS",
+  "Automation - Error",
+  "Automation - First Submitted At",
+  "Automation - YSWS Record ID"
+]);
+
 export function transformAirtableSubmission(
   raw: RawAirtableSubmission, 
   recordId: string, 
@@ -260,6 +293,17 @@ export function transformAirtableSubmission(
   rejectedColumn?: string,
   hackatimeProjectsColumn?: string
 ): YswsSubmission {
+  const knownFields = new Set(KNOWN_AIRTABLE_FIELDS);
+  if (rejectedColumn) knownFields.add(rejectedColumn);
+  if (hackatimeProjectsColumn) knownFields.add(hackatimeProjectsColumn);
+  
+  const auxiliaryFields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!knownFields.has(key) && value !== undefined && value !== null && value !== "") {
+      auxiliaryFields[key] = value;
+    }
+  }
+
   return new YswsSubmission(baseId, tableId, tableName, recordId, {
     codeUrl: raw["Code URL"] || "",
     demoUrl: raw["Playable URL"] || "",
@@ -288,7 +332,8 @@ export function transformAirtableSubmission(
     rejected: rejectedColumn ? !!(raw as unknown as Record<string, unknown>)[rejectedColumn] : false,
     automationError: raw["Automation - Error"] || "",
     approvedOn: raw["Automation - First Submitted At"] ? new Date(raw["Automation - First Submitted At"]) : null,
-    yswsDbRecordId: raw["Automation - YSWS Record ID"] || ""
+    yswsDbRecordId: raw["Automation - YSWS Record ID"] || "",
+    auxiliaryFields
   });
 }
 
