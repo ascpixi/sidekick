@@ -7,6 +7,7 @@ import { TimeSection } from "./ui/TimeSection";
 import { SubmissionDetails } from "./ui/SubmissionDetails";
 import { FulfillmentInfo } from "./ui/FulfillmentInfo";
 import { FeedbackSection } from "./ui/FeedbackSection";
+import { AuxiliarySection } from "./ui/AuxiliarySection";
 import { ImagePreview } from "./ui/ImagePreview";
 import { useSubmissionActions } from "../hooks/useSubmissionActions";
 import { useSubmissionData } from "../hooks/useSubmissionData";
@@ -359,6 +360,8 @@ export function MainLayout({
               <FulfillmentInfo submission={selectedSubmission} />
 
               <FeedbackSection submission={selectedSubmission} />
+
+              <AuxiliarySection submission={selectedSubmission} />
             </div>
           </div>
         ) : (
