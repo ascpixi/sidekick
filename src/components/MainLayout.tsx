@@ -382,6 +382,7 @@ export function MainLayout({
                 isLoadingHeartbeats={heartbeatData.isLoading}
                 hackatimeUserId={heartbeatData.hackatimeUserId}
                 aggregatedProjectHours={heartbeatData.aggregatedProjectHours}
+                isApproved={selectedSubmission.approved}
               />
 
               <SubmissionDetails

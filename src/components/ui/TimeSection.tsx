@@ -18,7 +18,8 @@ export function TimeSection({
   heartbeatProgress,
   isLoadingHeartbeats = false,
   hackatimeUserId,
-  aggregatedProjectHours
+  aggregatedProjectHours,
+  isApproved = false
 }: {
   localHoursSpent: number;
   localHoursSpentJustification: string;
@@ -33,6 +34,7 @@ export function TimeSection({
   isLoadingHeartbeats?: boolean;
   hackatimeUserId?: number | null;
   aggregatedProjectHours?: number | null;
+  isApproved?: boolean;
 }) {
   const heartbeatsKey = heartbeats.length > 0 
     ? `${heartbeats.length}-${heartbeats[0]?.time ?? 0}` 
@@ -113,7 +115,7 @@ export function TimeSection({
           </div>
         )}
 
-        {hasHackatimeIntegration && aggregatedProjectHours != null && (
+        {hasHackatimeIntegration && isApproved && aggregatedProjectHours != null && (
           <div className="mb-4 flex items-center gap-2">
             <label className="text-sm font-medium">YSWS aggregate</label>
             <span className="text-sm font-mono bg-base-200 px-2 py-1 rounded">
