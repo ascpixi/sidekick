@@ -150,7 +150,7 @@ export function MainLayout({
       })}
 
       {submissions.length === 0 && (
-        <div className="p-8 text-center text-base-content/70">
+        <div className="p-4 text-center text-base-content/70 text-sm">
           No submissions in this category
         </div>
       )}
