@@ -13,7 +13,8 @@ import { useSubmissionActions } from "../hooks/useSubmissionActions";
 import { useSubmissionData } from "../hooks/useSubmissionData";
 import { useHeartbeatData } from "../hooks/useHeartbeatData";
 import { TrustAlert } from "./ui/TrustAlert";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
+import { FunnelIcon } from "@heroicons/react/24/outline";
 
 export function MainLayout({ 
   submissions, 
@@ -40,6 +41,7 @@ export function MainLayout({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [emailCopied, setEmailCopied] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authorFilter, setAuthorFilter] = useState("");
   
   const submissionActions = useSubmissionActions(
     currentBase,
@@ -66,6 +68,10 @@ export function MainLayout({
   }, [selectedSubmission]);
 
   useEffect(() => {
+    setAuthorFilter("");
+  }, [currentBase?.id]);
+
+  useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setPreviewImage(null);
@@ -78,9 +84,14 @@ export function MainLayout({
     }
   }, [previewImage]);
 
-  const pendingSubmissions = submissions.filter(s => !s.approved && !s.rejected);
-  const approvedSubmissions = submissions.filter(s => s.approved);
-  const rejectedSubmissions = submissions.filter(s => s.rejected);
+  const filteredSubmissions = useMemo(() => {
+    if (!authorFilter) return submissions;
+    return submissions.filter(s => s.authorGithub === authorFilter);
+  }, [submissions, authorFilter]);
+
+  const pendingSubmissions = filteredSubmissions.filter(s => !s.approved && !s.rejected);
+  const approvedSubmissions = filteredSubmissions.filter(s => s.approved);
+  const rejectedSubmissions = filteredSubmissions.filter(s => s.rejected);
 
   const handleSubmissionClick = (submission: YswsSubmission) => {
     onSubmissionSelect(submission);
@@ -170,6 +181,26 @@ export function MainLayout({
 
   const sidebarContent = (
     <div>
+      <div className="p-3 border-b border-base-content/10">
+        <div className="flex items-center gap-2">
+          <FunnelIcon className="w-4 h-4 text-base-content/60 flex-shrink-0" />
+          <select
+            value={authorFilter}
+            onChange={(e) => setAuthorFilter(e.target.value)}
+            className="select select-sm select-bordered w-full focus:!outline-none focus:!border-primary"
+          >
+            <option value="">All authors</option>
+            {[...new Set(submissions.map(s => s.authorGithub).filter(Boolean))].sort().map(github => (
+              <option key={github} value={github}>@{github}</option>
+            ))}
+          </select>
+        </div>
+        {authorFilter && (
+          <div className="text-xs text-base-content/60 mt-1">
+            Showing {filteredSubmissions.length} of {submissions.length} submissions
+          </div>
+        )}
+      </div>
       <Accordion title={
         <div className="flex items-center gap-3">
           <span>Pending</span>
