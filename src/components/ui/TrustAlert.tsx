@@ -14,7 +14,7 @@ export function TrustAlert({
   trustLogs: HackatimeTrustLog[];
 }) {
   return (
-    <div role="alert" className={`alert alert-${variant} mt-6`}>
+    <div role="alert" className={`alert ${variant == "warning" ? "alert-warning" : "alert-error"} mt-6`}>
       {icon}
       <div>
         <p>{message}</p>
