@@ -169,7 +169,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
     svg.selectAll("*").remove();
 
     const brushHeight = 40;
-    const margin = { top: 20, right: 30, bottom: 20 + brushHeight, left: 60 };
+    const margin = { top: 20, right: 60, bottom: 20 + brushHeight, left: 60 };
     const width = dimensions.width - margin.left - margin.right;
     const height = dimensions.height - margin.top - margin.bottom - brushHeight;
 
@@ -187,13 +187,16 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .domain(timeExtent)
       .range([0, width]);
 
-    // Get max line number and cursor position for Y scale
+    // Get max line number and cursor position for separate Y scales
     const maxLineno = d3.max(heartbeats, d => d.lineno) || 100;
     const maxCursorpos = d3.max(heartbeats, d => d.cursorpos) || 100;
-    const yMax = Math.max(maxLineno, maxCursorpos);
 
-    const yScale = d3.scaleLinear()
-      .domain([0, yMax])
+    const yScaleLineno = d3.scaleLinear()
+      .domain([0, maxLineno])
+      .range([height, 0]);
+
+    const yScaleCursor = d3.scaleLinear()
+      .domain([0, maxCursorpos])
       .range([height, 0]);
 
     // Add clip path
@@ -212,7 +215,8 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
     const xAxis = d3.axisBottom(xScale)
       .tickFormat((d) => d3.timeFormat("%H:%M")(d as Date));
 
-    const yAxis = d3.axisLeft(yScale);
+    const yAxisLeft = d3.axisLeft(yScaleLineno);
+    const yAxisRight = d3.axisRight(yScaleCursor);
 
     const xAxisGroup = g.append("g")
       .attr("class", "x-axis")
@@ -220,14 +224,35 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .call(xAxis);
 
     g.append("g")
-      .call(yAxis)
-      .append("text")
+      .call(yAxisLeft)
+      .attr("class", "y-axis-left")
+      .selectAll("text")
+      .attr("fill", "#3b82f6");
+
+    g.append("text")
       .attr("transform", "rotate(-90)")
-      .attr("y", -40)
+      .attr("y", -45)
       .attr("x", -height / 2)
-      .attr("fill", "currentColor")
+      .attr("fill", "#3b82f6")
       .style("text-anchor", "middle")
-      .text("Line Number / Cursor Position");
+      .style("font-size", "12px")
+      .text("Line Number");
+
+    g.append("g")
+      .attr("transform", `translate(${width}, 0)`)
+      .call(yAxisRight)
+      .attr("class", "y-axis-right")
+      .selectAll("text")
+      .attr("fill", "#ef4444");
+
+    g.append("text")
+      .attr("transform", "rotate(90)")
+      .attr("y", -width - 45)
+      .attr("x", height / 2)
+      .attr("fill", "#ef4444")
+      .style("text-anchor", "middle")
+      .style("font-size", "12px")
+      .text("Cursor Position");
 
     // Content group with clipping
     const content = g.append("g")
@@ -240,7 +265,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .append("circle")
       .attr("class", "line-dot")
       .attr("cx", d => xScale(d.time))
-      .attr("cy", d => yScale(d.lineno))
+      .attr("cy", d => yScaleLineno(d.lineno))
       .attr("r", 5)
       .attr("fill", "#3b82f6")
       .attr("opacity", 0.7)
@@ -254,7 +279,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .append("circle")
       .attr("class", "cursor-dot")
       .attr("cx", d => xScale(d.time))
-      .attr("cy", d => yScale(d.cursorpos))
+      .attr("cy", d => yScaleCursor(d.cursorpos))
       .attr("r", 5)
       .attr("fill", "#ef4444")
       .attr("opacity", 0.7)
@@ -266,9 +291,13 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .attr("class", "brush-context")
       .attr("transform", `translate(${margin.left},${margin.top + height + 30})`);
 
-    // Mini Y scale for brush area
-    const yScaleBrush = d3.scaleLinear()
-      .domain([0, yMax])
+    // Mini Y scales for brush area
+    const yScaleBrushLineno = d3.scaleLinear()
+      .domain([0, maxLineno])
+      .range([brushHeight - 10, 0]);
+
+    const yScaleBrushCursor = d3.scaleLinear()
+      .domain([0, maxCursorpos])
       .range([brushHeight - 10, 0]);
 
     // Mini chart in brush area
@@ -277,7 +306,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .enter()
       .append("circle")
       .attr("cx", d => xScaleBrush(d.time))
-      .attr("cy", d => yScaleBrush(d.lineno))
+      .attr("cy", d => yScaleBrushLineno(d.lineno))
       .attr("r", 2)
       .attr("fill", "#3b82f6")
       .attr("opacity", 0.5);
@@ -287,7 +316,7 @@ export function HeartbeatGraph({ clusters, currentClusterIndex, onClusterChange,
       .enter()
       .append("circle")
       .attr("cx", d => xScaleBrush(d.time))
-      .attr("cy", d => yScaleBrush(d.cursorpos))
+      .attr("cy", d => yScaleBrushCursor(d.cursorpos))
       .attr("r", 2)
       .attr("fill", "#ef4444")
       .attr("opacity", 0.5);
