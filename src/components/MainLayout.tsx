@@ -1,5 +1,5 @@
 import { YswsSubmission, type BaseSettings, type AirtableBase, getSubmissionTitle } from "../types/submission";
-import { EnvelopeIcon, CodeBracketIcon, ExclamationTriangleIcon, NoSymbolIcon, Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
+import { EnvelopeIcon, CodeBracketIcon, ExclamationTriangleIcon, NoSymbolIcon, Bars3Icon, XMarkIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import { Card } from "./ui/Card";
 import { Accordion } from "./ui/Accordion";
 import { SubmissionHeader } from "./ui/SubmissionHeader";
@@ -40,6 +40,7 @@ export function MainLayout({
   const submissionViewRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [emailCopied, setEmailCopied] = useState(false);
+  const [codeUrlCopied, setCodeUrlCopied] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authorFilter, setAuthorFilter] = useState("");
   
@@ -58,6 +59,15 @@ export function MainLayout({
       navigator.clipboard.writeText(selectedSubmission.authorEmail);
       setEmailCopied(true);
       setTimeout(() => setEmailCopied(false), 2000);
+    }
+  };
+
+  const handleCopyCodeUrl = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (selectedSubmission?.codeUrl) {
+      navigator.clipboard.writeText(selectedSubmission.codeUrl);
+      setCodeUrlCopied(true);
+      setTimeout(() => setCodeUrlCopied(false), 2000);
     }
   };
 
@@ -315,15 +325,23 @@ export function MainLayout({
 
                 <div className="flex flex-col gap-2 text-sm">
                   {selectedSubmission.codeUrl && (
-                    <a 
-                      href={selectedSubmission.codeUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="link link-hover text-base-content/70 flex items-center gap-2"
-                    >
-                      <CodeBracketIcon className="w-4 h-4" />
-                      {selectedSubmission.codeUrl}
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <a 
+                        href={selectedSubmission.codeUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="link link-hover text-base-content/70 flex items-center gap-2"
+                      >
+                        <CodeBracketIcon className="w-4 h-4" />
+                        {selectedSubmission.codeUrl}
+                      </a>
+                      <div className="tooltip" data-tip={codeUrlCopied ? "Copied!" : "Copy"}>
+                        <ClipboardDocumentIcon 
+                          className="w-4 h-4 cursor-pointer text-base-content/70 hover:text-primary transition-all active:scale-75" 
+                          onClick={handleCopyCodeUrl}
+                        />
+                      </div>
+                    </div>
                   )}
                   
                   {selectedSubmission.authorEmail && (
