@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { AuthSetup } from "./components/AuthSetup";
+import { AuthSetup, type AuthConfig } from "./components/AuthSetup";
 import { Header } from "./components/Header";
 import { MainLayout } from "./components/MainLayout";
 import { AirtableService, type AirtableTable } from "./services/airtable";
@@ -27,6 +27,7 @@ function App() {
   const [selectedSubmission, setSelectedSubmission] = useState<YswsSubmission | undefined>();
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
 
   const handleSubmissionSelect = useCallback((submission: YswsSubmission) => {
     setSelectedSubmission(submission);
@@ -39,13 +40,16 @@ function App() {
     }
   }, [config]);
 
-  function handleAuthComplete(airtablePAT: string, hackatimeAdminKey: string) {
-    setConfig({
-      airtablePAT,
-      hackatimeAdminKey,
-      bases: [],
-      baseSettings: {}
-    });
+  function handleAuthComplete(authConfig: AuthConfig) {
+    setConfig(prev => ({
+      airtablePAT: authConfig.airtablePAT,
+      hackatimeAdminKey: authConfig.hackatimeKey,
+      groqApiKey: authConfig.groqApiKey,
+      bases: prev?.bases || [],
+      baseSettings: prev?.baseSettings || {},
+      selectedBaseId: prev?.selectedBaseId
+    }));
+    setIsPreferencesOpen(false);
   }
 
   const handleUpdateBase = useCallback((baseId: string, tableId: string, tableName: string, viewId?: string, viewName?: string) => {
@@ -193,6 +197,12 @@ function App() {
 
   if (!config) return <AuthSetup onComplete={handleAuthComplete} />;
 
+  const authConfig: AuthConfig = {
+    airtablePAT: config.airtablePAT,
+    hackatimeKey: config.hackatimeAdminKey,
+    groqApiKey: config.groqApiKey
+  };
+
   return (
     <div className="min-h-screen sm:h-screen flex flex-col overflow-y-auto sm:overflow-hidden">
       <Header 
@@ -203,6 +213,7 @@ function App() {
         airtablePAT={config.airtablePAT}
         baseSettings={config.baseSettings || {}}
         onBaseSettingsUpdate={handleBaseSettingsUpdate}
+        onOpenPreferences={() => setIsPreferencesOpen(true)}
       />
       <div className="flex-1 sm:overflow-hidden p-1 sm:p-6">
         <MainLayout 
@@ -215,8 +226,18 @@ function App() {
           currentBase={config.selectedBaseId ? config.bases.find(base => base.id === config.selectedBaseId) : undefined}
           baseSettings={config.baseSettings || {}}
           hackatimeAdminKey={config.hackatimeAdminKey}
+          groqApiKey={config.groqApiKey}
         />
       </div>
+
+      {isPreferencesOpen && (
+        <AuthSetup
+          isModal
+          onComplete={handleAuthComplete}
+          onClose={() => setIsPreferencesOpen(false)}
+          initialValues={authConfig}
+        />
+      )}
     </div>
   );
 }

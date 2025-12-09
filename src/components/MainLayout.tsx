@@ -15,6 +15,7 @@ import { useHeartbeatData } from "../hooks/useHeartbeatData";
 import { TrustAlert } from "./ui/TrustAlert";
 import { useRef, useEffect, useState, useMemo } from "react";
 import { FunnelIcon } from "@heroicons/react/24/outline";
+import { normalizeUrl } from "../utils";
 
 export function MainLayout({ 
   submissions, 
@@ -25,7 +26,8 @@ export function MainLayout({
   error,
   currentBase,
   baseSettings,
-  hackatimeAdminKey
+  hackatimeAdminKey,
+  groqApiKey
 }: { 
   submissions: YswsSubmission[];
   selectedSubmission?: YswsSubmission;
@@ -36,6 +38,7 @@ export function MainLayout({
   currentBase?: AirtableBase;
   baseSettings: Record<string, BaseSettings>;
   hackatimeAdminKey?: string;
+  groqApiKey?: string;
 }) {
   const submissionViewRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -327,7 +330,7 @@ export function MainLayout({
                   {selectedSubmission.codeUrl && (
                     <div className="flex items-center gap-2">
                       <a 
-                        href={selectedSubmission.codeUrl} 
+                        href={normalizeUrl(selectedSubmission.codeUrl)} 
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="link link-hover text-base-content/70 flex items-center gap-2"
@@ -401,6 +404,11 @@ export function MainLayout({
                 hackatimeUserId={heartbeatData.hackatimeUserId}
                 aggregatedProjectHours={heartbeatData.aggregatedProjectHours}
                 isApproved={selectedSubmission.approved}
+                groqApiKey={groqApiKey}
+                userProjectKeys={heartbeatData.userProjectKeys}
+                codeUrl={selectedSubmission.codeUrl}
+                demoUrl={selectedSubmission.demoUrl}
+                description={selectedSubmission.description}
               />
 
               <SubmissionDetails

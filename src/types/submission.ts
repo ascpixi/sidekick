@@ -250,6 +250,7 @@ export interface BaseSettings {
 export interface AppConfig {
   airtablePAT: string;
   hackatimeAdminKey: string;
+  groqApiKey?: string;
   bases: AirtableBase[];
   selectedBaseId?: string;
   baseSettings?: Record<string, BaseSettings>; // Key is baseId

@@ -4,7 +4,7 @@ import { SidekickIcon } from "./SidekickIcon";
 import { ModalHeader } from "./ModalHeader";
 import { Input } from "./Input";
 import { BaseSettingsModal } from "./BaseSettingsModal";
-import { SparklesIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, WrenchScrewdriverIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { AirtableService, type AirtableTable } from "../services/airtable";
 
 interface AirtableApiBase {
@@ -20,7 +20,8 @@ export function Header({
   onAddBase, 
   airtablePAT,
   baseSettings,
-  onBaseSettingsUpdate 
+  onBaseSettingsUpdate,
+  onOpenPreferences
 }: { 
   bases: AirtableBase[];
   selectedBaseId?: string;
@@ -29,6 +30,7 @@ export function Header({
   airtablePAT: string;
   baseSettings: Record<string, BaseSettings>;
   onBaseSettingsUpdate: (baseId: string, settings: BaseSettings) => void;
+  onOpenPreferences: () => void;
 }) {
   const [isAddingBase, setIsAddingBase] = useState(false);
   const [availableBases, setAvailableBases] = useState<AirtableApiBase[]>([]);
@@ -214,6 +216,14 @@ export function Header({
         </div>
       </div>
       <div className="flex-none gap-2">
+        <button
+          onClick={onOpenPreferences}
+          className="btn btn-ghost btn-md sm:btn-sm"
+          title="Preferences"
+        >
+          <Cog6ToothIcon className="w-5 h-5" />
+          <span className="hidden sm:inline">Preferences</span>
+        </button>
       </div>
 
       {showModal && (

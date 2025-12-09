@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { YswsSubmission } from "../../types/submission";
 import { ActionButtons } from "./ActionButtons";
 import { ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { normalizeUrl } from "../../utils";
 
 function cleanUrlForDisplay(url: string): string {
   return url.replace(/^https?:\/\/(www\.)?/, "");
@@ -43,7 +44,7 @@ export function SubmissionHeader({
         {submission.demoUrl ? (
           <span className="inline-flex items-center gap-2">
             <a 
-              href={submission.demoUrl} 
+              href={normalizeUrl(submission.demoUrl)} 
               target="_blank" 
               rel="noopener noreferrer"
               className="link link-hover text-primary"

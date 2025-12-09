@@ -13,6 +13,15 @@ export function debounce<T extends (...args: Parameters<T>) => void>(
 
 const URL_REGEX = /(https?:\/\/[^\s<>]+)/g;
 
+export function normalizeUrl(url: string): string {
+  if (!url) return url;
+  const trimmed = url.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export function linkify(text: string) {
   const parts = text.split(URL_REGEX);
   return parts.map((part, i) => {

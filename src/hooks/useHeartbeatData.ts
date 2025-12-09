@@ -21,6 +21,7 @@ export function useHeartbeatData(
   const [trustLevel, setTrustLevel] = useState<HackatimeTrustLevel | null>(null);
   const [trustLogs, setTrustLogs] = useState<HackatimeTrustLog[]>([]);
   const [aggregatedProjectHours, setAggregatedProjectHours] = useState<number | null>(null);
+  const [userProjectKeys, setUserProjectKeys] = useState<string[]>([]);
 
   const hackatimeService = useMemo(() => {
     if (!hackatimeApiKey) return null;
@@ -41,6 +42,7 @@ export function useHeartbeatData(
         setTrustLevel(null);
         setTrustLogs([]);
         setAggregatedProjectHours(null);
+        setUserProjectKeys([]);
         return;
       }
 
@@ -48,14 +50,6 @@ export function useHeartbeatData(
         ?.split(",")
         .map(key => key.trim().toLowerCase())
         .filter(key => key.length > 0) ?? [];
-
-      if (projectKeys.length === 0) {
-        setHeartbeats([]);
-        setTrustLevel(null);
-        setTrustLogs([]);
-        setAggregatedProjectHours(null);
-        return;
-      }
 
       setIsLoading(true);
       setError(null);
@@ -89,6 +83,16 @@ export function useHeartbeatData(
 
         const allProjects = await hackatimeService.getUserProjects(userId);
         if (cancelled) return;
+
+        setUserProjectKeys(allProjects.projects.map(p => p.name));
+
+        if (projectKeys.length === 0) {
+          setHeartbeats([]);
+          setTrustLevel(null);
+          setTrustLogs([]);
+          setAggregatedProjectHours(null);
+          return;
+        }
 
         const keys = selectedSubmission.hackatimeProjectKeys
           .split(/[,;]/)
@@ -213,6 +217,7 @@ export function useHeartbeatData(
     hackatimeUserId,
     trustLevel,
     trustLogs,
-    aggregatedProjectHours
+    aggregatedProjectHours,
+    userProjectKeys
   };
 }
