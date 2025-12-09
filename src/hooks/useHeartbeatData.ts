@@ -103,8 +103,8 @@ export function useHeartbeatData(
         }
 
         const authorSubmissions = allSubmissions?.filter(
-          s => s.authorEmail?.toLowerCase() === selectedSubmission.authorEmail?.toLowerCase()
-        ) ?? [selectedSubmission];
+          s => s.authorEmail?.toLowerCase() === selectedSubmission.authorEmail?.toLowerCase() && s.approved
+        ) ?? (selectedSubmission.approved ? [selectedSubmission] : []);
         
         const allAuthorProjectKeys = new Set<string>();
         for (const sub of authorSubmissions) {
