@@ -35,7 +35,6 @@ function App() {
 
   useEffect(() => {
     if (config) {
-      console.log("Saving config to localStorage:", config);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     }
   }, [config]);
