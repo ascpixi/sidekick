@@ -28,6 +28,7 @@ function App() {
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [submissionsError, setSubmissionsError] = useState<string | null>(null);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  const [submissionCountsRefreshKey, setSubmissionCountsRefreshKey] = useState(0);
 
   const handleSubmissionSelect = useCallback((submission: YswsSubmission) => {
     setSelectedSubmission(submission);
@@ -164,7 +165,10 @@ function App() {
     }
   }, [config]);
 
-  const handleSubmissionUpdate = useCallback(() => setSubmissions(prev => [...prev]), []);
+  const handleSubmissionUpdate = useCallback(() => {
+    setSubmissions(prev => [...prev]);
+    setSubmissionCountsRefreshKey(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     if (config?.selectedBaseId) {
@@ -214,6 +218,7 @@ function App() {
         baseSettings={config.baseSettings || {}}
         onBaseSettingsUpdate={handleBaseSettingsUpdate}
         onOpenPreferences={() => setIsPreferencesOpen(true)}
+        submissionCountsRefreshKey={submissionCountsRefreshKey}
       />
       <div className="flex-1 sm:overflow-hidden p-1 sm:p-6">
         <MainLayout 

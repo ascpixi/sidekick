@@ -21,7 +21,8 @@ export function Header({
   airtablePAT,
   baseSettings,
   onBaseSettingsUpdate,
-  onOpenPreferences
+  onOpenPreferences,
+  submissionCountsRefreshKey
 }: { 
   bases: AirtableBase[];
   selectedBaseId?: string;
@@ -31,6 +32,7 @@ export function Header({
   baseSettings: Record<string, BaseSettings>;
   onBaseSettingsUpdate: (baseId: string, settings: BaseSettings) => void;
   onOpenPreferences: () => void;
+  submissionCountsRefreshKey?: number;
 }) {
   const [isAddingBase, setIsAddingBase] = useState(false);
   const [availableBases, setAvailableBases] = useState<AirtableApiBase[]>([]);
@@ -151,7 +153,7 @@ export function Header({
       }));
       fetchSubmissionCounts(basesToCheck);
     }
-  }, [bases, airtablePAT, fetchSubmissionCounts, baseSettings]);
+  }, [bases, airtablePAT, fetchSubmissionCounts, baseSettings, submissionCountsRefreshKey]);
 
   return (
     <header className="navbar bg-base-100 shadow-lg px-4 sm:px-8 py-4 flex-shrink-0">
