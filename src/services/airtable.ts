@@ -159,16 +159,22 @@ export class AirtableService {
   }
 
   async createField(baseId: string, tableId: string, fieldName: string, fieldType: string): Promise<AirtableField> {
+    const fieldPayload: { name: string; type: string; options?: { color: string; icon: string } } = {
+      name: fieldName,
+      type: fieldType,
+    };
+
+    if (fieldType === "checkbox") {
+      fieldPayload.options = { color: "greenBright", icon: "check" };
+    }
+
     const response = await fetch(`https://api.airtable.com/v0/meta/bases/${baseId}/tables/${tableId}/fields`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        name: fieldName,
-        type: fieldType,
-      }),
+      body: JSON.stringify(fieldPayload),
     });
 
     if (!response.ok) {
