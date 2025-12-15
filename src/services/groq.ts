@@ -72,7 +72,7 @@ If you cannot determine a match with reasonable confidence, respond with exactly
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "deepseek-r1-distill-llama-70b",
+        model: "openai/gpt-oss-20b",
         messages: [
           { role: "user", content: prompt }
         ],
