@@ -58,40 +58,20 @@ export class HackatimeService {
         return await req.json() as T;
     }
 
-    private async queryDatabase(query: string) {
-        return await this.query<{
-            success: boolean,
-            query: string,
-            columns: string[],
-            rows: Record<string, [string, unknown]>[],
-            row_count: number,
-            executed_by: string,
-            executed_at: string
-        }>(
-            "POST", "admin/v1/execute", { query }
-        );
-    }
-
     async findIdByEmail(email: string) {
         if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email))
             throw new Error(`"${email}" is not a valid e-mail.`);
 
-        const res = await this.queryDatabase(
-            /*sql*/`SELECT users.id FROM users INNER JOIN email_addresses ON users.id=email_addresses.user_id WHERE email_addresses.email = '${email}' LIMIT 1;`
+        const res = await this.query<{ user_id?: number; error?: string }>(
+            "POST", "admin/v1/user/get_user_by_email", { email }
         );
 
-        if (!res.success || res.row_count == 0 || res.rows.length == 0) {
+        if (res.error || res.user_id === undefined) {
             console.error(`Could not get Hackatime ID for e-mail ${email}.`, res);
             return null;
         }
 
-        const row = res.rows[0];
-        if (!("id" in row) || typeof row["id"][1] !== "number") {
-            console.error("Malformed response schema for Hackatime SQL query.", res);
-            return null;
-        }
-        
-        return row["id"][1];
+        return res.user_id;
     }
 
     async getUserProjects(id: number) {
