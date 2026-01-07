@@ -54,7 +54,8 @@ export function MainLayout({
     onSubmissionUpdate
   );
 
-  const submissionData = useSubmissionData(selectedSubmission, onSubmissionUpdate);
+  const hackatimeProjectsColumn = currentBase ? baseSettings[currentBase.id]?.hackatimeProjectsColumn : undefined;
+  const submissionData = useSubmissionData(selectedSubmission, onSubmissionUpdate, hackatimeProjectsColumn);
   const heartbeatData = useHeartbeatData(selectedSubmission, hackatimeAdminKey, submissions);
 
   const handleCopyEmail = () => {

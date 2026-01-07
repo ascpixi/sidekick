@@ -3,7 +3,8 @@ import { YswsSubmission } from "../types/submission";
 
 export function useSubmissionData(
   selectedSubmission?: YswsSubmission,
-  onSubmissionUpdate?: () => void
+  onSubmissionUpdate?: () => void,
+  hackatimeProjectsColumn?: string
 ) {
   const [localHoursSpent, setLocalHoursSpent] = useState<number>(0);
   const [localHoursSpentJustification, setLocalHoursSpentJustification] = useState<string>("");
@@ -53,6 +54,18 @@ export function useSubmissionData(
     
     return () => clearTimeout(timeout);
   }, [localHoursSpentJustification, selectedSubmission, updateHoursSpentJustification]);
+
+  useEffect(() => {
+    if (!selectedSubmission || !hackatimeProjectsColumn) return;
+
+    const timeout = setTimeout(() => {
+      if (localHackatimeProjectKeys !== selectedSubmission.hackatimeProjectKeys) {
+        updateHackatimeProjectKeys(selectedSubmission, localHackatimeProjectKeys, hackatimeProjectsColumn);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timeout);
+  }, [localHackatimeProjectKeys, selectedSubmission, hackatimeProjectsColumn, updateHackatimeProjectKeys]);
 
   return {
     localHoursSpent,
