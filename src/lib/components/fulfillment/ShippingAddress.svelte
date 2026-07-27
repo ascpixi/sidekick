@@ -102,18 +102,30 @@
 	// Rewrite the clipboard payload so a manual selection copies as
 	// "Label: value" lines. The visible layout uses separate flex items for
 	// each label/value, which browsers otherwise serialize onto their own
-	// lines with no separator.
+	// lines with no separator. Rows whose label isn't part of the selection
+	// copy as just the value, and a selection touching no labels at all is
+	// left to the browser so partial value selections copy verbatim.
 	function handleCopy(e: ClipboardEvent) {
 		const selection = window.getSelection();
 		if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
 		if (!fieldsEl || !e.clipboardData) return;
 
-		const rows = [...fieldsEl.querySelectorAll<HTMLElement>('[data-field]')].filter((row) =>
-			selection.containsNode(row, true)
-		);
-		if (rows.length === 0) return;
+		const rows = [...fieldsEl.querySelectorAll<HTMLElement>('[data-field]')]
+			.filter((row) => selection.containsNode(row, true))
+			.map((row) => {
+				const labelEl = row.querySelector('[data-field-label]');
+				return {
+					row,
+					labelSelected: labelEl !== null && selection.containsNode(labelEl, true)
+				};
+			});
+		if (!rows.some(({ labelSelected }) => labelSelected)) return;
 
-		const text = rows.map((row) => `${row.dataset.label}: ${row.dataset.value}`).join('\n');
+		const text = rows
+			.map(({ row, labelSelected }) =>
+				labelSelected ? `${row.dataset.label}: ${row.dataset.value}` : row.dataset.value
+			)
+			.join('\n');
 		e.clipboardData.setData('text/plain', text);
 		e.preventDefault();
 	}
@@ -159,7 +171,7 @@
 					data-value={field.value}
 					class="flex flex-col @xs:flex-row @xs:items-center @xs:justify-between w-full gap-0.5 @xs:gap-2"
 				>
-					<span class="shrink-0">{field.label}</span>
+					<span data-field-label class="shrink-0">{field.label}</span>
 					<span class="truncate min-w-0">{field.value}</span>
 				</div>
 			{/each}
