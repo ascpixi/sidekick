@@ -4,7 +4,7 @@
 	import BentoLeaderboard from '$lib/components/ui/BentoLeaderboard.svelte';
 	import BentoBox from '$lib/components/ui/BentoBox.svelte';
 	import UserMention from '$lib/components/ui/UserMention.svelte';
-	import { Scale, Package, Trophy, Clock } from 'lucide-svelte';
+	import { Scale, Package, Trophy, Clock, Hourglass } from 'lucide-svelte';
 
 	interface Props {
 		data: PageData;
@@ -74,21 +74,15 @@
 			</div>
 		</div>
 
-		<div class="flex gap-5 items-center">
-			<div class="bg-surface flex flex-col gap-1 items-end justify-center overflow-clip pl-4 pr-8 py-3 rounded-section">
-				<div class="flex gap-2 items-center">
-					<Scale size={15} class="text-text-primary" />
-					<span class="text-[14px] tracking-[-0.28px]">Pending Review</span>
-				</div>
-				<span class="font-bold text-[24px] tracking-[-0.96px]">{data.pendingReviewCount}</span>
+		<div
+			class="bg-surface flex flex-col gap-1 items-end justify-center overflow-clip pl-4 pr-8 py-3 rounded-section"
+			title="Total hours of pending projects, divided by 10"
+		>
+			<div class="flex gap-2 items-center">
+				<Hourglass size={15} class="text-text-primary" />
+				<span class="text-[14px] tracking-[-0.28px]">Pending WPs</span>
 			</div>
-			<div class="bg-surface flex flex-col gap-1 items-end justify-center overflow-clip pl-4 pr-8 py-3 rounded-section">
-				<div class="flex gap-2 items-center">
-					<Package size={15} class="text-text-primary" />
-					<span class="text-[14px] tracking-[-0.28px]">Pending Fulfillment</span>
-				</div>
-				<span class="font-bold text-[24px] tracking-[-0.96px]">{data.pendingFulfillmentCount}</span>
-			</div>
+			<span class="font-bold text-[24px] tracking-[-0.96px]">{Math.round(data.pendingWps * 10) / 10}</span>
 		</div>
 	</div>
 

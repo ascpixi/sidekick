@@ -1,10 +1,41 @@
 import { redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db.js';
 import { ProtocolClient } from '$lib/server/protocol/client.js';
+import type { Project } from '$lib/server/protocol/types.js';
 import { createLogger } from '$lib/server/logger.js';
 import type { PageServerLoad } from './$types.js';
 
 const log = createLogger('page:dashboard');
+
+async function fetchAllProjects(
+	client: ProtocolClient,
+	status: 'pending' | 'pending_hq'
+): Promise<Project[]> {
+	const projects: Project[] = [];
+	let cursor: string | undefined;
+	for (;;) {
+		const result = await client.fetchProjects({ status, cursor, limit: 100 });
+		projects.push(...result.projects);
+		if (!result.nextCursor) break;
+		cursor = result.nextCursor;
+	}
+	return projects;
+}
+
+// hoursSubmitted is cumulative per project, so pending hours are measured
+// against the last approved ship — the same baseline the review timeline uses.
+// Programs that report per-ship hours (pending below the approved baseline)
+// fall back to the raw submitted value.
+function pendingProjectHours(project: Project): number {
+	const pending = project.ships
+		.filter((s) => s.status === 'pending' || s.status === 'pending_hq')
+		.reduce((max, s) => Math.max(max, s.hoursSubmitted), 0);
+	if (pending === 0) return 0;
+	const approved = project.ships
+		.filter((s) => s.status === 'approved')
+		.reduce((max, s) => Math.max(max, s.hoursSubmitted), 0);
+	return approved > 0 && pending > approved ? pending - approved : pending;
+}
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	const tLoad = log.time('load');
@@ -17,7 +48,24 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 
 	const client = new ProtocolClient(program.masterEndpoint, program.secretKey);
 
-	const stats = await client.getProgramStats({});
+	const [stats, pendingProjects, hqProjects] = await Promise.all([
+		client.getProgramStats({}),
+		fetchAllProjects(client, 'pending'),
+		fetchAllProjects(client, 'pending_hq')
+	]);
+
+	// One WP ("weighted project") per 10 pending hours. Dedupe across the two
+	// status queries — endpoints that don't support pending_hq may return
+	// overlapping (or all) projects, and pendingProjectHours already ignores
+	// projects with no pending ships.
+	const uniquePendingProjects = new Map(
+		[...pendingProjects, ...hqProjects].map((p) => [p.id, p])
+	);
+	let pendingHours = 0;
+	for (const project of uniquePendingProjects.values()) {
+		pendingHours += pendingProjectHours(project);
+	}
+	const pendingWps = pendingHours / 10;
 
 	const now = new Date();
 	const weekAgo = new Date(now.getTime() - 7 * 86400000);
@@ -174,6 +222,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		programId: params.programId,
 		pendingReviewCount: stats.pendingReviewCount,
 		pendingFulfillmentCount: stats.pendingFulfillmentCount,
+		pendingWps,
 		fulfillmentLogCount: fulfillmentLogs.length,
 		reviewLogCount: reviewLogs.length
 	});
@@ -182,6 +231,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	return {
 		pendingReviewCount: stats.pendingReviewCount,
 		pendingFulfillmentCount: stats.pendingFulfillmentCount,
+		pendingWps,
 		fulfillmentLeaderboardWeekly: fulfillmentLogsByUser,
 		fulfillmentLeaderboardAllTime: fulfillmentLogsAllTime,
 		reviewLeaderboardWeekly: reviewLogsByUser,
