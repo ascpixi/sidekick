@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { createLogger } from '../logger.js';
 import { aggregateByProject } from './hackatime-duration.js';
+import { LOOKOUT_TOKEN_REGEX } from './lookout.js';
 
 const log = createLogger('hackatime');
 const BASE_URL = 'https://hackatime.hackclub.com';
@@ -200,6 +201,11 @@ export interface ProjectHackatimeStats {
 	 * max(aiSeconds, browserSeconds).
 	 */
 	aiAndBrowserSeconds: number;
+	/**
+	 * Lookout session tokens found among the project's heartbeats (language
+	 * "Lookout", entity a 64-hex session token), deduplicated.
+	 */
+	lookoutTokens: string[];
 	/** True if the heartbeat fetch hit the safety cap; totals are lower bounds. */
 	truncated: boolean;
 }
@@ -224,7 +230,7 @@ export async function getProjectHackatimeStats(
 	end?: string
 ): Promise<ProjectHackatimeStats> {
 	log.debug('getProjectHackatimeStats called', { userId, projectKeys: projectKeys.join(','), start, end });
-	const empty: ProjectHackatimeStats = { projects: [], aiSeconds: 0, browserSeconds: 0, aiAndBrowserSeconds: 0, truncated: false };
+	const empty: ProjectHackatimeStats = { projects: [], aiSeconds: 0, browserSeconds: 0, aiAndBrowserSeconds: 0, lookoutTokens: [], truncated: false };
 	if (projectKeys.length === 0) return empty;
 
 	const matched = await getMatchedProjects(userId, projectKeys);
@@ -276,8 +282,19 @@ export async function getProjectHackatimeStats(
 	const browserSeconds = Math.max(0, total - nonBrowser);
 	const aiAndBrowserSeconds = Math.max(0, total - nonAiNonBrowser);
 
-	log.debug('getProjectHackatimeStats result', { userId, projectCount: projects.length, aiSeconds, browserSeconds, truncated });
-	return { projects, aiSeconds, browserSeconds, aiAndBrowserSeconds, truncated };
+	const lookoutTokens = [
+		...new Set(
+			scoped
+				.filter(
+					(hb) =>
+						hb.language?.toLowerCase() === 'lookout' && LOOKOUT_TOKEN_REGEX.test(hb.entity ?? '')
+				)
+				.map((hb) => hb.entity)
+		)
+	];
+
+	log.debug('getProjectHackatimeStats result', { userId, projectCount: projects.length, aiSeconds, browserSeconds, lookoutTokenCount: lookoutTokens.length, truncated });
+	return { projects, aiSeconds, browserSeconds, aiAndBrowserSeconds, lookoutTokens, truncated };
 }
 
 export async function getUserTrustFactor(

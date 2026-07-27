@@ -110,6 +110,7 @@
 	let airtable = $state<Awaited<typeof data.airtableData> | null>(null);
 	let github = $state<Awaited<typeof data.githubData> | null>(null);
 	let lapse = $state<Awaited<typeof data.lapseData> | null>(null);
+	let lookout = $state<Awaited<typeof data.lookoutData> | null>(null);
 	let authorProjects = $state<Awaited<typeof data.authorProjectsData> | null>(null);
 	let userNote = $state<Awaited<typeof data.userNoteData> | null>(null);
 
@@ -135,6 +136,12 @@
 		lapse = null;
 		data.lapseData.then((v) => {
 			lapse = v;
+		});
+	});
+	$effect(() => {
+		lookout = null;
+		data.lookoutData.then((v) => {
+			lookout = v;
 		});
 	});
 	$effect(() => {
@@ -477,7 +484,8 @@
 		airtable: airtable
 			? { records: airtable.airtableRecords, previousHours: airtable.airtablePreviousHours }
 			: null,
-		lapse: lapse ? { timelapses: lapse.lapseTimelapses } : null
+		lapse: lapse ? { timelapses: lapse.lapseTimelapses } : null,
+		lookout: lookout ? { sessions: lookout.lookoutSessions } : null
 	});
 
 	async function handleReviewSubmit(reviewData: {
@@ -875,6 +883,7 @@
 								date: e.timestamp
 							}))}
 						timelapses={lapse?.lapseTimelapses ?? []}
+						lookoutSessions={lookout?.lookoutSessions ?? []}
 						class="flex-1 min-h-0"
 					/>
 				</div>

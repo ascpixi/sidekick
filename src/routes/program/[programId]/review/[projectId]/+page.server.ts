@@ -8,6 +8,7 @@ import type { TrustLog, UserInfo } from '$lib/server/integrations/hackatime.js';
 import { findRecordsByUrl, airtableRecordUrl, normalizeUrl as normalizeAirtableUrl } from '$lib/server/integrations/airtable.js';
 import { parseRepoUrl, getCommits, getRepoInfo, getReadme } from '$lib/server/integrations/github.js';
 import { getLapseTimelapses } from '$lib/server/integrations/lapse.js';
+import { getLookoutSessions } from '$lib/server/integrations/lookout.js';
 import { CHECKS } from '$lib/server/checks/registry.js';
 import { enqueueChecks } from '$lib/server/queue/checks.js';
 import { createLogger } from '$lib/server/logger.js';
@@ -101,6 +102,19 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		ownerHandle: string;
 		hackatimeProject: string | null;
 	};
+	type LookoutEntry = {
+		token: string;
+		name: string;
+		status: string;
+		trackedSeconds: number;
+		screenshotCount: number;
+		clientInfo: string | null;
+		startedAt: string | null;
+		totalActiveSeconds: number;
+		createdAt: string;
+		thumbnailUrl: string | null;
+		videoUrl: string | null;
+	};
 	type AirtableMatch = {
 		id: string;
 		url: string;
@@ -125,7 +139,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 
 	const hackatimeData = (async () => {
 		if (!(hackatimeUser && project.hackatimeProjectKeys.length > 0)) {
-			return { hackatime: null as { totalSeconds: number; aiSeconds: number; browserSeconds: number; aiAndBrowserSeconds: number; truncated: boolean } | null, trustLevel: null as string | null, trustLogs: [] as TrustLog[], projectBreakdown: [] as { name: string; totalSeconds: number }[] };
+			return { hackatime: null as { totalSeconds: number; aiSeconds: number; browserSeconds: number; aiAndBrowserSeconds: number; truncated: boolean } | null, trustLevel: null as string | null, trustLogs: [] as TrustLog[], projectBreakdown: [] as { name: string; totalSeconds: number }[], lookoutTokens: [] as string[] };
 		}
 		try {
 			// hackatimeStartDate scopes aggregation to the program's event window —
@@ -142,11 +156,12 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 				hackatime: { totalSeconds, aiSeconds: stats.aiSeconds, browserSeconds: stats.browserSeconds, aiAndBrowserSeconds: stats.aiAndBrowserSeconds, truncated: stats.truncated },
 				trustLevel,
 				trustLogs,
-				projectBreakdown: stats.projects.map((p) => ({ name: p.name, totalSeconds: p.totalSeconds }))
+				projectBreakdown: stats.projects.map((p) => ({ name: p.name, totalSeconds: p.totalSeconds })),
+				lookoutTokens: stats.lookoutTokens
 			};
 		} catch (e) {
 			log.error('hackatime integration failed', e);
-			return { hackatime: null, trustLevel: null, trustLogs: [], projectBreakdown: [] };
+			return { hackatime: null, trustLevel: null, trustLogs: [], projectBreakdown: [], lookoutTokens: [] as string[] };
 		}
 	})();
 
@@ -264,6 +279,22 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		} catch (e) {
 			log.error('lapse integration failed', e);
 			return { lapseTimelapses: [] as LapseEntry[] };
+		}
+	})();
+
+	// Lookout screen-recording sessions are discovered from the project's
+	// Hackatime heartbeats (language "Lookout", entity = session token), so this
+	// piggybacks on hackatimeData's heartbeat fetch instead of doing its own.
+	const lookoutData = (async () => {
+		try {
+			const ht = await hackatimeData;
+			if (ht.lookoutTokens.length === 0) return { lookoutSessions: [] as LookoutEntry[] };
+			const sessions = await getLookoutSessions(ht.lookoutTokens);
+			log.debug('lookout data loaded', { sessionCount: sessions.length });
+			return { lookoutSessions: sessions as LookoutEntry[] };
+		} catch (e) {
+			log.error('lookout integration failed', e);
+			return { lookoutSessions: [] as LookoutEntry[] };
 		}
 	})();
 
@@ -528,6 +559,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		airtableData,
 		githubData,
 		lapseData,
+		lookoutData,
 		authorProjectsData,
 		userNoteData,
 		checkShipId,

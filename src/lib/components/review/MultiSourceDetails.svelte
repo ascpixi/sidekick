@@ -4,6 +4,7 @@
 	import TabBar from '$lib/components/ui/TabBar.svelte';
 	import GitHubIcon from '$lib/components/icons/GitHubIcon.svelte';
 	import LapseIcon from '$lib/components/icons/LapseIcon.svelte';
+	import LookoutIcon from '$lib/components/icons/LookoutIcon.svelte';
 	import Avatar from '$lib/components/ui/Avatar.svelte';
 
 	interface CommitFile {
@@ -55,10 +56,25 @@
 		hackatimeProject: string | null;
 	}
 
+	interface LookoutSession {
+		token: string;
+		name: string;
+		status: string;
+		trackedSeconds: number;
+		screenshotCount: number;
+		clientInfo: string | null;
+		startedAt: string | null;
+		totalActiveSeconds: number;
+		createdAt: string;
+		thumbnailUrl: string | null;
+		videoUrl: string | null;
+	}
+
 	interface Props {
 		commits: GitCommit[];
 		markers?: TimelineMarker[];
 		timelapses?: LapseTimelapse[];
+		lookoutSessions?: LookoutSession[];
 		repoUrl?: string;
 		programId?: string;
 		loading?: boolean;
@@ -71,6 +87,7 @@
 		commits,
 		markers = [],
 		timelapses = [],
+		lookoutSessions = [],
 		repoUrl = '',
 		programId = '',
 		loading = false,
@@ -154,6 +171,9 @@
 		if (timelapses.length > 0) {
 			t.push({ id: 'lapse', label: `Lapse (${timelapses.length})`, icon: LapseIcon });
 		}
+		if (lookoutSessions.length > 0) {
+			t.push({ id: 'lookout', label: `Lookout (${lookoutSessions.length})`, icon: LookoutIcon });
+		}
 		return t;
 	})());
 
@@ -234,6 +254,20 @@
 
 	function lapseUrl(id: string): string {
 		return `https://lapse.hackclub.com/timelapse/${id}`;
+	}
+
+	/** Human label for a non-complete Lookout session; null once the video is ready. */
+	function lookoutStatusLabel(status: string): string | null {
+		switch (status) {
+			case 'complete': return null;
+			case 'pending': return 'Not started';
+			case 'active': return 'Recording';
+			case 'paused': return 'Paused';
+			case 'stopped':
+			case 'compiling': return 'Processing video';
+			case 'failed': return 'Processing failed';
+			default: return status;
+		}
 	}
 
 	function daysBetween(a: string, b: string): number {
@@ -485,6 +519,63 @@
 						</div>
 					</a>
 					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/each}
+			</div>
+		{:else if activeTab === 'lookout'}
+			{#snippet lookoutCard(s: LookoutSession)}
+				{#if s.thumbnailUrl}
+					<div class="relative aspect-video bg-surface">
+						<img src={s.thumbnailUrl} alt="" class="w-full h-full object-cover" />
+						<div class="absolute bottom-1.5 right-1.5 bg-black/70 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">
+							{fmtDuration(s.trackedSeconds)}
+						</div>
+					</div>
+				{:else}
+					<div class="relative aspect-video bg-surface flex items-center justify-center">
+						<LookoutIcon size={24} />
+						{#if s.trackedSeconds}
+							<div class="absolute bottom-1.5 right-1.5 bg-black/70 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">
+								{fmtDuration(s.trackedSeconds)}
+							</div>
+						{/if}
+					</div>
+				{/if}
+				<div class="px-3 py-2.5 flex flex-col gap-0.5">
+					<div class="flex items-center justify-between gap-2">
+						<p class="font-semibold text-sm text-text-primary truncate">{s.name}</p>
+						{#if s.videoUrl}
+							<ExternalLink size={12} class="shrink-0 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+						{/if}
+					</div>
+					<p class="text-xs text-text-tertiary truncate">
+						{s.screenshotCount} screenshot{s.screenshotCount === 1 ? '' : 's'}{s.createdAt ? ` · ${shortDate(s.createdAt)}` : ''}
+					</p>
+					{#if s.clientInfo}
+						<p class="text-xs text-text-secondary font-mono truncate">{s.clientInfo}</p>
+					{/if}
+					{#if lookoutStatusLabel(s.status)}
+						<p class="text-[10px] text-text-faint italic">{lookoutStatusLabel(s.status)}</p>
+					{/if}
+				</div>
+			{/snippet}
+			<div class="grid grid-cols-2 gap-3">
+				{#each lookoutSessions as s (s.token)}
+					{#if s.videoUrl}
+						<!-- eslint-disable svelte/no-navigation-without-resolve -->
+						<a
+							href={s.videoUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="group border border-border-card rounded-section overflow-hidden transition-colors hover:border-accent"
+						>
+							{@render lookoutCard(s)}
+						</a>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
+					{:else}
+						<div class="border border-border-card rounded-section overflow-hidden">
+							{@render lookoutCard(s)}
+						</div>
+					{/if}
 				{/each}
 			</div>
 		{/if}

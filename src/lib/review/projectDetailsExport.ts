@@ -7,8 +7,8 @@
 //
 // The export is assembled client-side in the review page from the data the
 // reviewer currently sees. Integration sections (hackatime / github / airtable
-// / lapse) load asynchronously, so each is `null` until its source resolves —
-// a payload copied early may legitimately have nulls there.
+// / lapse / lookout) load asynchronously, so each is `null` until its source
+// resolves — a payload copied early may legitimately have nulls there.
 // ============================================================================
 
 import type { ProjectTag, TimelineEvent } from '$lib/server/protocol/types.js';
@@ -37,6 +37,8 @@ export interface ProjectDetailsExport {
 	airtable: ProjectExportAirtable | null;
 	/** Lapse timelapses, or null if unavailable / not yet loaded. */
 	lapse: ProjectExportLapse | null;
+	/** Lookout screen-recording sessions, or null if unavailable / not yet loaded. */
+	lookout: ProjectExportLookout | null;
 }
 
 export interface ProjectExportProgram {
@@ -135,4 +137,29 @@ export interface ProjectExportLapseEntry {
 
 export interface ProjectExportLapse {
 	timelapses: ProjectExportLapseEntry[];
+}
+
+export interface ProjectExportLookoutSession {
+	/** Session token (also the key used to fetch it from the Lookout API). */
+	token: string;
+	name: string;
+	status: string;
+	/** Tracked work time in seconds. */
+	trackedSeconds: number;
+	/** Confirmed screenshot uploads. */
+	screenshotCount: number;
+	/** First client-info string reported (e.g. "Lookout Desktop/0.3.3 (Windows 10.0.26200)"). */
+	clientInfo: string | null;
+	/** ISO 8601; null if the session never activated. */
+	startedAt: string | null;
+	/** Total active (non-paused) wall-clock seconds. */
+	totalActiveSeconds: number;
+	createdAt: string;
+	thumbnailUrl: string | null;
+	/** Null until the session's video finishes compiling. */
+	videoUrl: string | null;
+}
+
+export interface ProjectExportLookout {
+	sessions: ProjectExportLookoutSession[];
 }
