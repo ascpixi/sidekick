@@ -1,6 +1,7 @@
 import { getSessionUser } from '$lib/server/auth.js';
 import { createLogger } from '$lib/server/logger.js';
 import { ProtocolError, ProtocolTransportError } from '$lib/server/protocol/client.js';
+import { HcbApiError } from '$lib/server/integrations/hcb.js';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 
 const log = createLogger('hooks');
@@ -54,6 +55,10 @@ export const handleError: HandleServerError = ({ error, event, status, message }
 	if (error instanceof ProtocolTransportError) {
 		// Already reads "<ACTION> request to the master endpoint failed: <reason>".
 		return { message: error.message };
+	}
+	if (error instanceof HcbApiError) {
+		// e.g. "HCB card grant creation failed: You don't have enough money to make this disbursement."
+		return { message: error.displayMessage };
 	}
 
 	return { message };

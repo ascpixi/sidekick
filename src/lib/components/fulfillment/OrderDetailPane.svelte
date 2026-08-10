@@ -408,7 +408,14 @@
 
 			if (!res.ok) {
 				const text = await res.text();
-				grantError = `Failed: ${text}`;
+				// Error responses are JSON ({ message }) — show just the message, not raw JSON.
+				let message = text;
+				try {
+					message = JSON.parse(text).message ?? text;
+				} catch {
+					// leave the raw text
+				}
+				grantError = `Failed: ${message}`;
 				log.error('Card grant failed', { status: res.status, body: text });
 				return;
 			}
