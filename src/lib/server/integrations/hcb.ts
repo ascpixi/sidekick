@@ -6,6 +6,35 @@ import { createLogger } from '../logger.js';
 const log = createLogger('hcb');
 const HCB_BASE = 'https://hcb.hackclub.com';
 
+// HCB's v4 API reports failures as { error, messages: [...] }, e.g.
+// { "error": "invalid_operation", "messages": ["You don't have enough money..."] }.
+// Keep the human-readable part separate so handleError can show it to the user
+// instead of masking it as "Internal Error".
+export class HcbApiError extends Error {
+	status: number;
+	displayMessage: string;
+
+	constructor(action: string, status: number, body: string) {
+		let detail = '';
+		try {
+			const parsed = JSON.parse(body);
+			if (Array.isArray(parsed?.messages) && parsed.messages.length > 0) {
+				detail = parsed.messages.join(' ');
+			} else if (typeof parsed?.error === 'string') {
+				detail = parsed.error;
+			}
+		} catch {
+			// non-JSON body; fall back to the raw text
+		}
+		if (!detail) detail = body || `HTTP ${status}`;
+
+		super(`${action}: ${status} ${body}`);
+		this.name = 'HcbApiError';
+		this.status = status;
+		this.displayMessage = `${action}: ${detail}`;
+	}
+}
+
 export interface HcbTokens {
 	access_token: string;
 	refresh_token: string;
@@ -80,7 +109,7 @@ export async function exchangeHcbCode(code: string): Promise<HcbTokens> {
 		const text = await res.text();
 		timer.end({ status: res.status });
 		log.error('exchangeHcbCode failed', undefined, { status: res.status });
-		throw new Error(`HCB token exchange failed: ${res.status} ${text}`);
+		throw new HcbApiError('HCB token exchange failed', res.status, text);
 	}
 
 	timer.end({ status: res.status });
@@ -106,7 +135,7 @@ export async function refreshHcbToken(refreshToken: string): Promise<HcbTokens> 
 		const text = await res.text();
 		timer.end({ status: res.status });
 		log.error('refreshHcbToken failed', undefined, { status: res.status });
-		throw new Error(`HCB token refresh failed: ${res.status} ${text}`);
+		throw new HcbApiError('HCB token refresh failed', res.status, text);
 	}
 
 	timer.end({ status: res.status });
@@ -153,7 +182,7 @@ export async function createCardGrant(
 		const text = await res.text();
 		timer.end({ status: res.status });
 		log.error('createCardGrant failed', undefined, { orgId, status: res.status });
-		throw new Error(`HCB card grant creation failed: ${res.status} ${text}`);
+		throw new HcbApiError('HCB card grant creation failed', res.status, text);
 	}
 
 	const result: CardGrantResult = await res.json();
@@ -201,7 +230,7 @@ export async function topUpCardGrant(
 		const text = await res.text();
 		timer.end({ status: res.status });
 		log.error('topUpCardGrant failed', undefined, { grantId, status: res.status });
-		throw new Error(`HCB card grant top-up failed: ${res.status} ${text}`);
+		throw new HcbApiError('HCB card grant top-up failed', res.status, text);
 	}
 
 	const result: CardGrantResult = await res.json();
@@ -246,7 +275,7 @@ export async function createHcbTransfer(
 		const text = await res.text();
 		timer.end({ status: res.status });
 		log.error('createHcbTransfer failed', undefined, { sourceOrgSlug, toOrganizationId, status: res.status });
-		throw new Error(`HCB transfer failed: ${res.status} ${text}`);
+		throw new HcbApiError('HCB transfer failed', res.status, text);
 	}
 
 	const result: HcbTransferResult = await res.json();
