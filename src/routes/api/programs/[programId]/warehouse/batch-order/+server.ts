@@ -3,7 +3,7 @@ import { db } from '$lib/server/db.js';
 import { requirePermission } from '$lib/server/rbac.js';
 import { ProtocolClient, ProtocolError, isAddressUnavailable } from '$lib/server/protocol/client.js';
 import { decrypt } from '$lib/server/crypto.js';
-import { createWarehouseOrder } from '$lib/server/integrations/theseus.js';
+import { createWarehouseOrder, parseWarehouseTags } from '$lib/server/integrations/theseus.js';
 import { getValidHcbToken, createHcbTransfer } from '$lib/server/integrations/hcb.js';
 import { createLogger } from '$lib/server/logger.js';
 import type { CreateWarehouseOrderParams } from '$lib/server/integrations/theseus.js';
@@ -147,6 +147,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		throw error(404, 'No warehouse template configured for this item');
 	}
 
+	const tags = parseWarehouseTags(template.tags);
+	if (tags.length === 0) {
+		logger.warn('Warehouse template has no tags', { itemId, userId });
+		throw error(400, 'The warehouse template for this item has no tags — Theseus requires at least one. Add one in program settings.');
+	}
+
 	const allPending = await fetchAllPendingOrdersForItem(client, itemId);
 	const userOrders = allPending.filter(o => o.userId === userId);
 
@@ -182,7 +188,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		throw error(400, 'No shipping address on file for this order');
 	}
 
-	const tags = template.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
 	const contents = (template.contents as Array<{ sku: string; quantity: number }>).map(c => ({
 		sku: c.sku,
 		quantity: c.quantity * totalQuantity

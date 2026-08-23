@@ -374,6 +374,8 @@
 			.filter(c => c.sku.trim())
 			.map(c => ({ sku: c.sku.trim(), quantity: parseInt(c.quantity) || 1 }));
 		if (contents.length === 0) return;
+		// Theseus rejects warehouse orders without tags, so don't let a template be saved without them
+		if (!form.tags.trim()) return;
 
 		savingWarehouseTemplate = itemId;
 		try {
@@ -1730,7 +1732,7 @@
 											{:else}
 												{@const wForm = warehouseTemplateForms[item.id]}
 												<div class="flex flex-col gap-1">
-													<label for="wh-tags-{item.id}" class="text-xs font-semibold text-text-secondary">Tags <span class="font-normal text-text-tertiary">(comma-separated)</span></label>
+													<label for="wh-tags-{item.id}" class="text-xs font-semibold text-text-secondary">Tags <span class="font-normal text-text-tertiary">(comma-separated, required)</span></label>
 													<input
 														id="wh-tags-{item.id}"
 														type="text"
@@ -1738,6 +1740,9 @@
 														placeholder="e.g. stickers,hackclub"
 														class="w-full h-9 px-3 rounded-input border border-border-input text-sm text-text-input focus:outline-none focus:border-border-active"
 													/>
+													{#if !wForm.tags.trim()}
+														<span class="text-[11px] text-text-tertiary">Theseus requires at least one tag on every warehouse order.</span>
+													{/if}
 												</div>
 
 												<div class="flex flex-col gap-1">
@@ -1806,7 +1811,7 @@
 													<button
 														class="px-3 py-1.5 rounded-tag bg-accent text-white text-xs font-medium hover:opacity-90 cursor-pointer disabled:opacity-50"
 														onclick={() => saveWarehouseTemplate(item.id)}
-														disabled={savingWarehouseTemplate === item.id || !wForm.contents.some(c => c.sku.trim())}
+														disabled={savingWarehouseTemplate === item.id || !wForm.tags.trim() || !wForm.contents.some(c => c.sku.trim())}
 													>
 														{#if savingWarehouseTemplate === item.id}
 															<Loader2 size={12} class="animate-spin inline mr-1" />

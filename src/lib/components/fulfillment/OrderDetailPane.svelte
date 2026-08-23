@@ -485,6 +485,8 @@
 	});
 
 	const hasBatchableOrders = $derived(batchOrders.length > 1);
+	// Theseus rejects warehouse orders without tags, so older templates saved without any can't be sent
+	const warehouseTemplateHasTags = $derived(!!warehouseTemplate?.tags?.split(',').some(t => t.trim()));
 
 	async function sendWarehouseOrder() {
 		if (!warehouseTemplate || !hasTheseusApiKey || !hcbOrganization) return;
@@ -935,6 +937,15 @@
 				>
 					<Package size={14} />
 					Send Warehouse Order ({!hasTheseusApiKey ? 'API key not configured' : 'HCB not configured'})
+				</button>
+			{:else if !warehouseTemplateHasTags}
+				<button
+					disabled
+					class="flex items-center justify-center gap-2 h-10 px-4 rounded-input bg-surface text-text-tertiary text-sm font-medium cursor-not-allowed"
+					title="Theseus requires at least one tag — add one to this item's warehouse template in program settings"
+				>
+					<Package size={14} />
+					Send Warehouse Order (template has no tags)
 				</button>
 			{:else}
 				<div class="flex flex-col gap-2 border border-border-card rounded-section p-3">

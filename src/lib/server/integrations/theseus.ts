@@ -73,10 +73,26 @@ export async function getTheseusUser(apiKey: string): Promise<TheseusUser> {
 	return user;
 }
 
+/**
+ * Splits a comma-separated template tag string into the tag list Theseus expects.
+ * Theseus requires at least one tag - an empty list is rejected with a 400
+ * `missing_parameter` error, so callers must check the result before sending.
+ */
+export function parseWarehouseTags(raw: string | null | undefined): string[] {
+	return (raw ?? '')
+		.split(',')
+		.map(t => t.trim())
+		.filter(Boolean);
+}
+
 export async function createWarehouseOrder(
 	apiKey: string,
 	params: CreateWarehouseOrderParams
 ): Promise<WarehouseOrderResult> {
+	if (params.warehouse_order.tags.length === 0) {
+		throw new Error('Warehouse order creation failed: at least one tag is required by Theseus');
+	}
+
 	log.info('createWarehouseOrder: creating order', {
 		email: params.warehouse_order.recipient_email,
 		tags: params.warehouse_order.tags,

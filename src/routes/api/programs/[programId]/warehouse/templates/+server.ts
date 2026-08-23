@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/server/db.js';
 import { requirePermission } from '$lib/server/rbac.js';
+import { parseWarehouseTags } from '$lib/server/integrations/theseus.js';
 import { createLogger } from '$lib/server/logger.js';
 import type { RequestHandler } from './$types.js';
 
@@ -41,6 +42,11 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 		throw error(400, 'shopItemId is required');
 	}
 
+	const parsedTags = parseWarehouseTags(tags);
+	if (parsedTags.length === 0) {
+		throw error(400, 'At least one tag is required — Theseus rejects warehouse orders without tags');
+	}
+
 	if (!Array.isArray(contents) || contents.length === 0) {
 		throw error(400, 'contents must be a non-empty array of { sku, quantity }');
 	}
@@ -69,13 +75,13 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 		create: {
 			programId: params.programId,
 			shopItemId,
-			tags: (tags ?? '').trim(),
+			tags: parsedTags.join(','),
 			userFacingTitle: userFacingTitle || null,
 			metadata: metadata || null,
 			contents
 		},
 		update: {
-			tags: (tags ?? '').trim(),
+			tags: parsedTags.join(','),
 			userFacingTitle: userFacingTitle || null,
 			metadata: metadata || null,
 			contents
@@ -89,7 +95,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 			action: 'warehouse_template_upsert',
 			entityType: 'warehouse_template',
 			entityId: template.id,
-			metadata: { shopItemId, tags }
+			metadata: { shopItemId, tags: parsedTags }
 		}
 	});
 
