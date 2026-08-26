@@ -73,12 +73,12 @@
 		}
 	}
 
-	// Joe identifies users by Hackatime ID first, falling back to Slack ID.
-	const joeId = $derived(hackatimeId ?? slackId);
+	// Telescreen identifies subjects by Hackatime ID first, falling back to Slack ID.
+	const telescreenId = $derived(hackatimeId ?? slackId);
 
-	function openJoe() {
-		if (joeId) {
-			window.open(`https://joe.fraud.hackclub.com/profile/${joeId}`, '_blank');
+	function openTelescreen() {
+		if (telescreenId) {
+			window.open(`https://telescreen.hackclub.com/subjects/${telescreenId}`, '_blank');
 		}
 	}
 
@@ -141,11 +141,11 @@
 				{/if}
 			</div>
 		</div>
-		{#if joeId}
+		{#if telescreenId}
 			<button
 				class="size-8 shrink-0 rounded-tag border border-border-input flex items-center justify-center hover:bg-surface transition-colors cursor-pointer"
-				onclick={openJoe}
-				title="Open profile in Joe"
+				onclick={openTelescreen}
+				title="Open profile in Telescreen"
 			>
 				<Eye size={16} />
 			</button>
