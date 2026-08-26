@@ -150,7 +150,7 @@
 	let overviewLoading = $state(false);
 	let overflowTooltip = $state<{ x: number; y: number } | null>(null);
 	let scrollContainer = $state<HTMLElement | null>(null);
-	let joeCopied = $state(false);
+	let telescreenCopied = $state(false);
 	let selectedProject = $state<string | null>(null);
 	let overflowHideTimer: ReturnType<typeof setTimeout> | null = null;
 	let activeTab = $state('graph');
@@ -609,19 +609,21 @@
 		return present.size > 0 ? [...present] : effectiveProjectKeys;
 	});
 
-	function buildJoeUrl(): string {
+	function buildTelescreenUrl(): string {
+		// Telescreen's workbench reads `u` as a numeric Hackatime ID; a Slack ID
+		// (our fallback when a project has no Hackatime ID) goes in `slack` instead.
 		const params = new URLSearchParams({
-			u: hackatimeUser,
+			...(/^\d+$/.test(hackatimeUser) ? { u: hackatimeUser } : { slack: hackatimeUser }),
 			d: currentDate,
 			p: dayProjectKeys.join(',')
 		});
-		return `https://joe.fraud.hackclub.com/billy?${params}`;
+		return `https://telescreen.hackclub.com/workbench/hackatime?${params}`;
 	}
 
-	async function copyJoeLink() {
-		await navigator.clipboard.writeText(buildJoeUrl());
-		joeCopied = true;
-		setTimeout(() => (joeCopied = false), 2000);
+	async function copyTelescreenLink() {
+		await navigator.clipboard.writeText(buildTelescreenUrl());
+		telescreenCopied = true;
+		setTimeout(() => (telescreenCopied = false), 2000);
 	}
 
 	async function fetchAllHeartbeats() {
@@ -863,17 +865,17 @@
 			</div>
 		</div>
 		<button
-			class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-4 {joeCopied
+			class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-4 {telescreenCopied
 				? 'bg-check-pass/10 text-check-pass border border-check-pass/30'
 				: 'bg-page border border-border-card text-text-secondary hover:text-text-primary'}"
-			onclick={copyJoeLink}
+			onclick={copyTelescreenLink}
 		>
-			{#if joeCopied}
+			{#if telescreenCopied}
 				<Check size={12} />
 				Copied
 			{:else}
 				<ExternalLink size={12} />
-				Copy Joe link
+				Copy Telescreen link
 			{/if}
 		</button>
 	</div>
