@@ -281,7 +281,15 @@
 				months = fallbackMonths();
 			}
 
-			await Promise.all(months.map((ym) => fetchActivity(ym)));
+			// Fetch months a couple at a time: each is a full-month heartbeat pull
+			// on the server, and firing a whole project's history at once is
+			// enough of a burst to trip Hackatime's admin API rate limit.
+			const queue = [...months];
+			await Promise.all(
+				Array.from({ length: Math.min(2, queue.length) }, async () => {
+					while (queue.length > 0) await fetchActivity(queue.shift()!);
+				})
+			);
 
 			if (!hasSelectedInitialDay) {
 				hasSelectedInitialDay = true;
@@ -491,6 +499,11 @@
 
 		fetch(`/api/programs/${programId}/hackatime/heartbeats?${params}`)
 			.then(async (res) => {
+				if (res.status === 429) {
+					throw new Error(
+						'Hackatime rate limit hit — wait a few seconds, then switch days to retry'
+					);
+				}
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
 				const data = await res.json();

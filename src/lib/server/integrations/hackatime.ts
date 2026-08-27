@@ -55,7 +55,30 @@ interface SummaryResult {
 	grand_total: { total_seconds: number; text: string };
 }
 
-async function authFetch(path: string, params?: Record<string, string>): Promise<Response> {
+/** Hackatime's admin API returned 429 and retries were exhausted. */
+export class HackatimeRateLimitError extends Error {
+	constructor() {
+		super('Hackatime API rate limit exceeded');
+		this.name = 'HackatimeRateLimitError';
+	}
+}
+
+// Hackatime rate-limits the admin token, and a single review session fans out
+// to the same handful of endpoints from several places (the page load, checks,
+// and the client-side viewer), so identical GETs are coalesced while in flight
+// and their parsed bodies cached briefly. The TTL bounds staleness for
+// today's heartbeats; the entry cap bounds memory (heartbeat pages can run to
+// a few MB each).
+const CACHE_TTL_MS = 2 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 64;
+const responseCache = new Map<string, { data: unknown; expiresAt: number }>();
+const inFlight = new Map<string, Promise<unknown>>();
+
+const RETRY_DELAYS_MS = [1000, 3000];
+const MAX_RETRY_AFTER_MS = 10_000;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON, same contract response.json() had
+async function authFetch(path: string, params?: Record<string, string>): Promise<any> {
 	const token = env.HACKATIME_ADMIN_TOKEN;
 	if (!token) {
 		throw new Error('HACKATIME_ADMIN_TOKEN is not set');
@@ -67,25 +90,77 @@ async function authFetch(path: string, params?: Record<string, string>): Promise
 			url.searchParams.set(key, value);
 		}
 	}
+	const key = url.toString();
 
+	const cached = responseCache.get(key);
+	if (cached && cached.expiresAt > Date.now()) {
+		log.trace('authFetch cache hit', { path });
+		return cached.data;
+	}
+	responseCache.delete(key);
+
+	const pending = inFlight.get(key);
+	if (pending) {
+		log.trace('authFetch coalesced into in-flight request', { path });
+		return pending;
+	}
+
+	const promise = fetchWithRetry(key, path, params, token);
+	inFlight.set(key, promise);
+	try {
+		const data = await promise;
+		responseCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+		while (responseCache.size > CACHE_MAX_ENTRIES) {
+			// Maps iterate in insertion order, so the first key is the oldest entry.
+			responseCache.delete(responseCache.keys().next().value!);
+		}
+		return data;
+	} finally {
+		inFlight.delete(key);
+	}
+}
+
+async function fetchWithRetry(
+	url: string,
+	path: string,
+	params: Record<string, string> | undefined,
+	token: string
+): Promise<unknown> {
 	log.trace('authFetch request', { path, params: params ? Object.keys(params).join(',') : undefined });
 	const timer = log.time(`authFetch ${path}`);
 
-	const response = await fetch(url.toString(), {
-		headers: {
-			Authorization: `Bearer ${token}`,
-			Accept: 'application/json'
+	for (let attempt = 0; ; attempt++) {
+		const response = await fetch(url, {
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: 'application/json'
+			}
+		});
+
+		if (response.status === 429 && attempt < RETRY_DELAYS_MS.length) {
+			const retryAfterS = Number(response.headers.get('retry-after'));
+			const delayMs =
+				Number.isFinite(retryAfterS) && retryAfterS > 0
+					? Math.min(retryAfterS * 1000, MAX_RETRY_AFTER_MS)
+					: RETRY_DELAYS_MS[attempt];
+			log.warn('authFetch rate limited; retrying', { path, attempt, delayMs });
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
+			continue;
 		}
-	});
 
-	timer.end({ status: response.status });
+		timer.end({ status: response.status, attempt });
 
-	if (!response.ok) {
-		log.error('authFetch failed', undefined, { path, status: response.status, statusText: response.statusText });
-		throw new Error(`Hackatime API error: ${response.status} ${response.statusText}`);
+		if (response.status === 429) {
+			log.error('authFetch rate limited after retries', undefined, { path });
+			throw new HackatimeRateLimitError();
+		}
+		if (!response.ok) {
+			log.error('authFetch failed', undefined, { path, status: response.status, statusText: response.statusText });
+			throw new Error(`Hackatime API error: ${response.status} ${response.statusText}`);
+		}
+
+		return response.json();
 	}
-
-	return response;
 }
 
 export function tzDayBounds(dateStr: string, tz: string): { startS: number; endS: number } {
@@ -117,8 +192,7 @@ async function getMatchedProjects(
 	userId: string,
 	projectKeys: string[]
 ): Promise<{ names: string[]; earliestS: number; latestS: number } | null> {
-	const response = await authFetch('/api/admin/v1/user/projects', { id: userId });
-	const data = await response.json();
+	const data = await authFetch('/api/admin/v1/user/projects', { id: userId });
 	const keySet = new Set(projectKeys.map((k) => k.toLowerCase()));
 
 	interface AdminProject {
@@ -301,8 +375,7 @@ export async function getUserTrustFactor(
 	userId: string
 ): Promise<TrustFactor> {
 	log.debug('getUserTrustFactor called', { userId });
-	const response = await authFetch('/api/admin/v1/user/info', { id: userId });
-	const data = await response.json();
+	const data = await authFetch('/api/admin/v1/user/info', { id: userId });
 
 	const result = {
 		trustLevel: data.user.trust_level,
@@ -314,8 +387,7 @@ export async function getUserTrustFactor(
 
 export async function getUserInfo(userId: string): Promise<UserInfo> {
 	log.debug('getUserInfo called', { userId });
-	const response = await authFetch('/api/admin/v1/user/info', { id: userId });
-	const data = await response.json();
+	const data = await authFetch('/api/admin/v1/user/info', { id: userId });
 	const result = {
 		trustLevel: data.user.trust_level ?? 'unknown',
 		timezone: data.user.timezone ?? 'UTC'
@@ -335,8 +407,7 @@ interface RawTrustLog {
 
 export async function getTrustLogs(userId: string): Promise<TrustLog[]> {
 	log.debug('getTrustLogs called', { userId });
-	const response = await authFetch('/api/admin/v1/user/trust_logs', { id: userId });
-	const data = await response.json();
+	const data = await authFetch('/api/admin/v1/user/trust_logs', { id: userId });
 	const rawLogs: RawTrustLog[] = data.trust_logs ?? [];
 
 	const uniqueUsernames = [...new Set(rawLogs.map((r) => r.changed_by?.username).filter(Boolean))] as string[];
@@ -373,13 +444,12 @@ export async function getHeartbeatsByUserAgent(
 	endDate: string
 ): Promise<Heartbeat[]> {
 	log.debug('getHeartbeatsByUserAgent called', { userId, segment, startDate, endDate });
-	const response = await authFetch('/api/admin/v1/heartbeats/by_user_agent_segment', {
+	const data = await authFetch('/api/admin/v1/heartbeats/by_user_agent_segment', {
 		user_id: userId,
 		segment,
 		start_date: startDate,
 		end_date: endDate
 	});
-	const data = await response.json();
 
 	const heartbeats = data.heartbeats ?? [];
 	log.debug('getHeartbeatsByUserAgent result', { userId, heartbeatCount: heartbeats.length });
@@ -391,11 +461,10 @@ export async function getUserHeartbeats(
 	date: string
 ): Promise<Heartbeat[]> {
 	log.debug('getUserHeartbeats called', { userId, date });
-	const response = await authFetch('/api/admin/v1/user/heartbeats', {
+	const data = await authFetch('/api/admin/v1/user/heartbeats', {
 		user_id: userId,
 		date
 	});
-	const data = await response.json();
 
 	const heartbeats = data.heartbeats ?? [];
 	log.debug('getUserHeartbeats result', { userId, count: heartbeats.length });
@@ -461,8 +530,7 @@ export async function getRawHeartbeatRange(
 			offset: String(offset)
 		};
 		if (project !== undefined) params.project = project;
-		const response = await authFetch('/api/admin/v1/user/heartbeats', params);
-		const data = await response.json();
+		const data = await authFetch('/api/admin/v1/user/heartbeats', params);
 		const batch: RawHeartbeat[] = data.heartbeats ?? [];
 		const hasMore = data.has_more ?? false;
 		if (batch.length === 0 && hasMore) {
@@ -489,75 +557,6 @@ export async function getRawHeartbeatRange(
 
 	timer.end({ userId, totalHeartbeats: all.length, truncated });
 	return { heartbeats: all, truncated };
-}
-
-export interface HeartbeatLapseTimelapse {
-	id: string;
-	name: string;
-	heartbeatCount: number;
-	firstSeen: number;
-	lastSeen: number;
-	project: string;
-}
-
-export async function getLapseTimelapsesFromHeartbeats(
-	userId: string,
-	projectKeys: string[]
-): Promise<HeartbeatLapseTimelapse[]> {
-	log.debug('getLapseTimelapsesFromHeartbeats called', { userId, projectKeys: projectKeys.join(',') });
-	let matched;
-	try {
-		matched = await getMatchedProjects(userId, projectKeys);
-	} catch (err) {
-		log.error('getLapseTimelapsesFromHeartbeats failed to get date range', err, { userId });
-		return [];
-	}
-	if (!matched) return [];
-
-	const startS = Math.floor(new Date(utcDateStr(matched.earliestS) + 'T00:00:00Z').getTime() / 1000);
-	const endS = Math.floor(new Date(utcDateStr(matched.latestS) + 'T23:59:59Z').getTime() / 1000);
-
-	let all: RawHeartbeat[];
-	try {
-		const results = await Promise.all(
-			matched.names.map((name) => getRawHeartbeatRange(userId, startS, endS, name))
-		);
-		all = results.flatMap((r) => r.heartbeats);
-	} catch (err) {
-		log.error('getLapseTimelapsesFromHeartbeats failed to get heartbeats', err, { userId });
-		return [];
-	}
-	const lapseHbs = all.filter(
-		(hb) =>
-			hb.editor?.toLowerCase() === 'lapse' || hb.user_agent?.toLowerCase().includes('lapse')
-	);
-
-	const groups = new Map<string, RawHeartbeat[]>();
-	for (const hb of lapseHbs) {
-		const entity = hb.entity ?? '';
-		if (!groups.has(entity)) groups.set(entity, []);
-		groups.get(entity)!.push(hb);
-	}
-
-	const result: HeartbeatLapseTimelapse[] = [];
-	for (const [entity, hbs] of groups) {
-		const idMatch = entity.match(/\(([^)]+)\)\s*$/);
-		const id = idMatch?.[1] ?? entity;
-		const name = idMatch ? entity.slice(0, entity.lastIndexOf('(')).trimEnd() : entity;
-
-		const times = hbs.map((hb) => hb.time);
-		result.push({
-			id,
-			name,
-			heartbeatCount: hbs.length,
-			firstSeen: Math.min(...times),
-			lastSeen: Math.max(...times),
-			project: hbs[0].project
-		});
-	}
-
-	log.debug('getLapseTimelapsesFromHeartbeats result', { userId, timelapseCount: result.length });
-	return result.sort((a, b) => b.lastSeen - a.lastSeen);
 }
 
 export interface HackatimeSearchUser {
@@ -623,8 +622,7 @@ export async function getSummary(
 	};
 	if (project) params.project = project;
 
-	const response = await authFetch('/api/summary', params);
-	const data = await response.json();
+	const data = await authFetch('/api/summary', params);
 
 	const result = {
 		projects: data.projects ?? [],

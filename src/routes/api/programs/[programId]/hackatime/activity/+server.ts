@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import { requirePermission } from '$lib/server/rbac.js';
-import { getRawHeartbeatRange, tzDayBounds, dateInTimezone, type RawHeartbeat } from '$lib/server/integrations/hackatime.js';
+import { getRawHeartbeatRange, tzDayBounds, dateInTimezone, HackatimeRateLimitError, type RawHeartbeat } from '$lib/server/integrations/hackatime.js';
 import { sumCappedGaps } from '$lib/server/integrations/hackatime-duration.js';
 import { createLogger } from '$lib/server/logger.js';
 import type { RequestHandler } from './$types.js';
@@ -105,7 +105,15 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 	const endS = tzDayBounds(firstDayNextMonth, tz).startS - 1;
 
 	const projectKeys = new Set(projects.split(',').map((p) => p.trim().toLowerCase()));
-	const { heartbeats: raw } = await getRawHeartbeatRange(userId, startS, endS);
+	let raw: RawHeartbeat[];
+	try {
+		({ heartbeats: raw } = await getRawHeartbeatRange(userId, startS, endS));
+	} catch (e) {
+		if (e instanceof HackatimeRateLimitError) {
+			throw error(429, 'Hackatime is rate limiting Sidekick; wait a moment and try again');
+		}
+		throw e;
+	}
 	const filtered = raw.filter(
 		(hb) =>
 			projectKeys.has((hb.project ?? '').toLowerCase()) &&
