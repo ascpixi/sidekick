@@ -15,7 +15,8 @@
 		X,
 		CalendarOff,
 		Database,
-		CircleHelp
+		CircleHelp,
+		RefreshCw
 	} from 'lucide-svelte';
 	import HeartbeatFrequencyBar from './HeartbeatFrequencyBar.svelte';
 	import HeartbeatScatter from './HeartbeatScatter.svelte';
@@ -281,7 +282,15 @@
 				months = fallbackMonths();
 			}
 
-			await Promise.all(months.map((ym) => fetchActivity(ym)));
+			// Fetch months a couple at a time: each is a full-month heartbeat pull
+			// on the server, and firing a whole project's history at once is
+			// enough of a burst to trip Hackatime's admin API rate limit.
+			const queue = [...months];
+			await Promise.all(
+				Array.from({ length: Math.min(2, queue.length) }, async () => {
+					while (queue.length > 0) await fetchActivity(queue.shift()!);
+				})
+			);
 
 			if (!hasSelectedInitialDay) {
 				hasSelectedInitialDay = true;
@@ -472,6 +481,7 @@
 	}
 
 	$effect(() => {
+		void refreshNonce;
 		const date = currentDate;
 		const user = hackatimeUser;
 		const keys = effectiveProjectKeys;
@@ -491,6 +501,11 @@
 
 		fetch(`/api/programs/${programId}/hackatime/heartbeats?${params}`)
 			.then(async (res) => {
+				if (res.status === 429) {
+					throw new Error(
+						'Hackatime rate limit hit — wait a few seconds, then switch days to retry'
+					);
+				}
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
 				const data = await res.json();
@@ -624,6 +639,35 @@
 		await navigator.clipboard.writeText(buildTelescreenUrl());
 		telescreenCopied = true;
 		setTimeout(() => (telescreenCopied = false), 2000);
+	}
+
+	let refreshing = $state(false);
+	// Bumped after a cache purge so the day-heartbeats effect refires even
+	// though the selected date didn't change.
+	let refreshNonce = $state(0);
+
+	// Server-side, Hackatime responses are cached (finalized heartbeat windows
+	// for days) — this drops that cache plus the local month/day state, for
+	// when the reviewer needs live data.
+	async function refreshHackatimeData() {
+		if (refreshing) return;
+		refreshing = true;
+		log.info('Refreshing Hackatime data (purging caches)', { hackatimeUser });
+		try {
+			const res = await fetch(
+				`/api/programs/${programId}/hackatime/cache?userId=${encodeURIComponent(hackatimeUser)}`,
+				{ method: 'DELETE' }
+			);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			activityCache = {};
+			allHeartbeats = null;
+			refreshNonce++;
+			await loadOverview();
+		} catch (e) {
+			log.error('Failed to refresh Hackatime data', {}, e);
+		} finally {
+			refreshing = false;
+		}
 	}
 
 	async function fetchAllHeartbeats() {
@@ -865,7 +909,16 @@
 			</div>
 		</div>
 		<button
-			class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-4 {telescreenCopied
+			class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-4 bg-page border border-border-card text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-default"
+			onclick={refreshHackatimeData}
+			disabled={refreshing}
+			title="Drop cached Hackatime data and refetch live"
+		>
+			<RefreshCw size={12} class={refreshing ? 'animate-spin' : ''} />
+			Refresh data
+		</button>
+		<button
+			class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-2 {telescreenCopied
 				? 'bg-check-pass/10 text-check-pass border border-check-pass/30'
 				: 'bg-page border border-border-card text-text-secondary hover:text-text-primary'}"
 			onclick={copyTelescreenLink}

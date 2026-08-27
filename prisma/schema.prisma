@@ -251,6 +251,21 @@ model CardGrantTemplate {
   @@index([programId])
 }
 
+// Raw Hackatime admin API responses, keyed by request URL. Heartbeats for
+// windows that have fully passed are effectively final (submitted YSWS hours
+// certainly are), so they get a multi-day TTL; volatile metadata (trust level,
+// project list) gets minutes. See authFetch in integrations/hackatime.ts.
+model HackatimeCache {
+  key             String   @id
+  payload         Json
+  hackatimeUserId String?
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([hackatimeUserId])
+}
+
 model WarehouseTemplate {
   id             String   @id @default(cuid())
   programId      String

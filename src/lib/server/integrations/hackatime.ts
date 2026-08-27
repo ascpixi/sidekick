@@ -1,4 +1,6 @@
 import { env } from '$env/dynamic/private';
+import type { Prisma } from '@prisma/client';
+import { db } from '../db.js';
 import { createLogger } from '../logger.js';
 import { aggregateByProject } from './hackatime-duration.js';
 import { LOOKOUT_TOKEN_REGEX } from './lookout.js';
@@ -55,7 +57,49 @@ interface SummaryResult {
 	grand_total: { total_seconds: number; text: string };
 }
 
-async function authFetch(path: string, params?: Record<string, string>): Promise<Response> {
+/** Hackatime's admin API returned 429 and retries were exhausted. */
+export class HackatimeRateLimitError extends Error {
+	constructor() {
+		super('Hackatime API rate limit exceeded');
+		this.name = 'HackatimeRateLimitError';
+	}
+}
+
+// Hackatime rate-limits the admin token, and a single review session fans out
+// to the same handful of endpoints from several places (the page load, checks,
+// and the client-side viewer), so identical GETs are coalesced while in flight
+// and their parsed bodies cached briefly. The TTL bounds staleness for
+// today's heartbeats; the entry cap bounds memory (heartbeat pages can run to
+// a few MB each).
+const CACHE_TTL_MS = 2 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 64;
+const responseCache = new Map<string, { data: unknown; expiresAt: number }>();
+const inFlight = new Map<string, Promise<unknown>>();
+
+const RETRY_DELAYS_MS = [1000, 3000];
+const MAX_RETRY_AFTER_MS = 10_000;
+
+// Persistent (Postgres) cache tiers. Heartbeats can technically be backdated,
+// but hours submitted to a YSWS program are final at submission time — late
+// heartbeats wouldn't count anyway — so heartbeat windows that fully ended a
+// while ago are safe to cache for days. The 48h finalization margin absorbs
+// offline editor sync and any timezone offset. Metadata (trust level, project
+// list) genuinely changes and only gets minutes.
+const FINALIZED_AFTER_MS = 48 * 60 * 60 * 1000;
+const HEARTBEATS_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const METADATA_TTL_MS = 10 * 60 * 1000;
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+let lastCleanupMs = 0;
+
+interface AuthFetchOpts {
+	/** Persist the parsed response in Postgres for this long; omit for memory-only caching. */
+	persistTtlMs?: number;
+	/** Hackatime user the request is about, so invalidateHackatimeCache can target it. */
+	cacheUserId?: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON, same contract response.json() had
+async function authFetch(path: string, params?: Record<string, string>, opts?: AuthFetchOpts): Promise<any> {
 	const token = env.HACKATIME_ADMIN_TOKEN;
 	if (!token) {
 		throw new Error('HACKATIME_ADMIN_TOKEN is not set');
@@ -67,25 +111,145 @@ async function authFetch(path: string, params?: Record<string, string>): Promise
 			url.searchParams.set(key, value);
 		}
 	}
+	const key = url.toString();
 
+	const cached = responseCache.get(key);
+	if (cached && cached.expiresAt > Date.now()) {
+		log.trace('authFetch cache hit', { path });
+		return cached.data;
+	}
+	responseCache.delete(key);
+
+	const pending = inFlight.get(key);
+	if (pending) {
+		log.trace('authFetch coalesced into in-flight request', { path });
+		return pending;
+	}
+
+	const promise = loadThroughPersistentCache(key, path, params, token, opts);
+	inFlight.set(key, promise);
+	try {
+		const data = await promise;
+		responseCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+		while (responseCache.size > CACHE_MAX_ENTRIES) {
+			// Maps iterate in insertion order, so the first key is the oldest entry.
+			responseCache.delete(responseCache.keys().next().value!);
+		}
+		return data;
+	} finally {
+		inFlight.delete(key);
+	}
+}
+
+async function loadThroughPersistentCache(
+	key: string,
+	path: string,
+	params: Record<string, string> | undefined,
+	token: string,
+	opts?: AuthFetchOpts
+): Promise<unknown> {
+	if (opts?.persistTtlMs) {
+		try {
+			const row = await db.hackatimeCache.findUnique({ where: { key } });
+			if (row && row.expiresAt > new Date()) {
+				log.trace('authFetch persistent cache hit', { path });
+				return row.payload;
+			}
+		} catch (err) {
+			log.warn('hackatime cache read failed; fetching live', { path, error: String(err) });
+		}
+	}
+
+	const data = await fetchWithRetry(key, path, params, token);
+
+	if (opts?.persistTtlMs) {
+		const expiresAt = new Date(Date.now() + opts.persistTtlMs);
+		const payload = data as Prisma.InputJsonValue;
+		const hackatimeUserId = opts.cacheUserId ?? null;
+		// Fire-and-forget: a cache write failure must not fail the request.
+		db.hackatimeCache
+			.upsert({
+				where: { key },
+				create: { key, payload, hackatimeUserId, expiresAt },
+				update: { payload, hackatimeUserId, expiresAt }
+			})
+			.catch((err) => log.warn('hackatime cache write failed', { path, error: String(err) }));
+		maybeCleanupCache();
+	}
+
+	return data;
+}
+
+function maybeCleanupCache() {
+	const now = Date.now();
+	if (now - lastCleanupMs < CLEANUP_INTERVAL_MS) return;
+	lastCleanupMs = now;
+	db.hackatimeCache
+		.deleteMany({ where: { expiresAt: { lt: new Date() } } })
+		.then((r) => {
+			if (r.count > 0) log.debug('hackatime cache cleanup', { deleted: r.count });
+		})
+		.catch((err) => log.warn('hackatime cache cleanup failed', { error: String(err) }));
+}
+
+/**
+ * Drops every cached Hackatime response about the given user, from both the
+ * in-memory and the Postgres tier. For when a reviewer needs to see the
+ * user's live data (e.g. a fraud investigation) before TTLs run out.
+ */
+export async function invalidateHackatimeCache(userId: string): Promise<number> {
+	for (const key of [...responseCache.keys()]) {
+		const params = new URL(key).searchParams;
+		if (params.get('id') === userId || params.get('user_id') === userId) {
+			responseCache.delete(key);
+		}
+	}
+	const res = await db.hackatimeCache.deleteMany({ where: { hackatimeUserId: userId } });
+	log.info('hackatime cache invalidated', { userId, dbRows: res.count });
+	return res.count;
+}
+
+async function fetchWithRetry(
+	url: string,
+	path: string,
+	params: Record<string, string> | undefined,
+	token: string
+): Promise<unknown> {
 	log.trace('authFetch request', { path, params: params ? Object.keys(params).join(',') : undefined });
 	const timer = log.time(`authFetch ${path}`);
 
-	const response = await fetch(url.toString(), {
-		headers: {
-			Authorization: `Bearer ${token}`,
-			Accept: 'application/json'
+	for (let attempt = 0; ; attempt++) {
+		const response = await fetch(url, {
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: 'application/json'
+			}
+		});
+
+		if (response.status === 429 && attempt < RETRY_DELAYS_MS.length) {
+			const retryAfterS = Number(response.headers.get('retry-after'));
+			const delayMs =
+				Number.isFinite(retryAfterS) && retryAfterS > 0
+					? Math.min(retryAfterS * 1000, MAX_RETRY_AFTER_MS)
+					: RETRY_DELAYS_MS[attempt];
+			log.warn('authFetch rate limited; retrying', { path, attempt, delayMs });
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
+			continue;
 		}
-	});
 
-	timer.end({ status: response.status });
+		timer.end({ status: response.status, attempt });
 
-	if (!response.ok) {
-		log.error('authFetch failed', undefined, { path, status: response.status, statusText: response.statusText });
-		throw new Error(`Hackatime API error: ${response.status} ${response.statusText}`);
+		if (response.status === 429) {
+			log.error('authFetch rate limited after retries', undefined, { path });
+			throw new HackatimeRateLimitError();
+		}
+		if (!response.ok) {
+			log.error('authFetch failed', undefined, { path, status: response.status, statusText: response.statusText });
+			throw new Error(`Hackatime API error: ${response.status} ${response.statusText}`);
+		}
+
+		return response.json();
 	}
-
-	return response;
 }
 
 export function tzDayBounds(dateStr: string, tz: string): { startS: number; endS: number } {
@@ -117,8 +281,11 @@ async function getMatchedProjects(
 	userId: string,
 	projectKeys: string[]
 ): Promise<{ names: string[]; earliestS: number; latestS: number } | null> {
-	const response = await authFetch('/api/admin/v1/user/projects', { id: userId });
-	const data = await response.json();
+	const data = await authFetch(
+		'/api/admin/v1/user/projects',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 	const keySet = new Set(projectKeys.map((k) => k.toLowerCase()));
 
 	interface AdminProject {
@@ -301,8 +468,11 @@ export async function getUserTrustFactor(
 	userId: string
 ): Promise<TrustFactor> {
 	log.debug('getUserTrustFactor called', { userId });
-	const response = await authFetch('/api/admin/v1/user/info', { id: userId });
-	const data = await response.json();
+	const data = await authFetch(
+		'/api/admin/v1/user/info',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 
 	const result = {
 		trustLevel: data.user.trust_level,
@@ -314,8 +484,11 @@ export async function getUserTrustFactor(
 
 export async function getUserInfo(userId: string): Promise<UserInfo> {
 	log.debug('getUserInfo called', { userId });
-	const response = await authFetch('/api/admin/v1/user/info', { id: userId });
-	const data = await response.json();
+	const data = await authFetch(
+		'/api/admin/v1/user/info',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 	const result = {
 		trustLevel: data.user.trust_level ?? 'unknown',
 		timezone: data.user.timezone ?? 'UTC'
@@ -335,8 +508,11 @@ interface RawTrustLog {
 
 export async function getTrustLogs(userId: string): Promise<TrustLog[]> {
 	log.debug('getTrustLogs called', { userId });
-	const response = await authFetch('/api/admin/v1/user/trust_logs', { id: userId });
-	const data = await response.json();
+	const data = await authFetch(
+		'/api/admin/v1/user/trust_logs',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 	const rawLogs: RawTrustLog[] = data.trust_logs ?? [];
 
 	const uniqueUsernames = [...new Set(rawLogs.map((r) => r.changed_by?.username).filter(Boolean))] as string[];
@@ -373,13 +549,12 @@ export async function getHeartbeatsByUserAgent(
 	endDate: string
 ): Promise<Heartbeat[]> {
 	log.debug('getHeartbeatsByUserAgent called', { userId, segment, startDate, endDate });
-	const response = await authFetch('/api/admin/v1/heartbeats/by_user_agent_segment', {
+	const data = await authFetch('/api/admin/v1/heartbeats/by_user_agent_segment', {
 		user_id: userId,
 		segment,
 		start_date: startDate,
 		end_date: endDate
 	});
-	const data = await response.json();
 
 	const heartbeats = data.heartbeats ?? [];
 	log.debug('getHeartbeatsByUserAgent result', { userId, heartbeatCount: heartbeats.length });
@@ -391,11 +566,10 @@ export async function getUserHeartbeats(
 	date: string
 ): Promise<Heartbeat[]> {
 	log.debug('getUserHeartbeats called', { userId, date });
-	const response = await authFetch('/api/admin/v1/user/heartbeats', {
+	const data = await authFetch('/api/admin/v1/user/heartbeats', {
 		user_id: userId,
 		date
 	});
-	const data = await response.json();
 
 	const heartbeats = data.heartbeats ?? [];
 	log.debug('getUserHeartbeats result', { userId, count: heartbeats.length });
@@ -442,6 +616,12 @@ export async function getRawHeartbeatRange(
 ): Promise<HeartbeatRangeResult> {
 	log.debug('getRawHeartbeatRange called', { userId, startTimestampS, endTimestampS, project });
 	const timer = log.time('getRawHeartbeatRange');
+	// A window that fully ended a while ago won't meaningfully change — persist
+	// its pages. Windows touching the present stay memory-only.
+	const finalized = endTimestampS * 1000 < Date.now() - FINALIZED_AFTER_MS;
+	const cacheOpts = finalized
+		? { persistTtlMs: HEARTBEATS_TTL_MS, cacheUserId: userId }
+		: undefined;
 	const BATCH_SIZE = 5000;
 	const MAX_FETCH = 500000;
 	let all: RawHeartbeat[] = [];
@@ -461,8 +641,7 @@ export async function getRawHeartbeatRange(
 			offset: String(offset)
 		};
 		if (project !== undefined) params.project = project;
-		const response = await authFetch('/api/admin/v1/user/heartbeats', params);
-		const data = await response.json();
+		const data = await authFetch('/api/admin/v1/user/heartbeats', params, cacheOpts);
 		const batch: RawHeartbeat[] = data.heartbeats ?? [];
 		const hasMore = data.has_more ?? false;
 		if (batch.length === 0 && hasMore) {
@@ -489,75 +668,6 @@ export async function getRawHeartbeatRange(
 
 	timer.end({ userId, totalHeartbeats: all.length, truncated });
 	return { heartbeats: all, truncated };
-}
-
-export interface HeartbeatLapseTimelapse {
-	id: string;
-	name: string;
-	heartbeatCount: number;
-	firstSeen: number;
-	lastSeen: number;
-	project: string;
-}
-
-export async function getLapseTimelapsesFromHeartbeats(
-	userId: string,
-	projectKeys: string[]
-): Promise<HeartbeatLapseTimelapse[]> {
-	log.debug('getLapseTimelapsesFromHeartbeats called', { userId, projectKeys: projectKeys.join(',') });
-	let matched;
-	try {
-		matched = await getMatchedProjects(userId, projectKeys);
-	} catch (err) {
-		log.error('getLapseTimelapsesFromHeartbeats failed to get date range', err, { userId });
-		return [];
-	}
-	if (!matched) return [];
-
-	const startS = Math.floor(new Date(utcDateStr(matched.earliestS) + 'T00:00:00Z').getTime() / 1000);
-	const endS = Math.floor(new Date(utcDateStr(matched.latestS) + 'T23:59:59Z').getTime() / 1000);
-
-	let all: RawHeartbeat[];
-	try {
-		const results = await Promise.all(
-			matched.names.map((name) => getRawHeartbeatRange(userId, startS, endS, name))
-		);
-		all = results.flatMap((r) => r.heartbeats);
-	} catch (err) {
-		log.error('getLapseTimelapsesFromHeartbeats failed to get heartbeats', err, { userId });
-		return [];
-	}
-	const lapseHbs = all.filter(
-		(hb) =>
-			hb.editor?.toLowerCase() === 'lapse' || hb.user_agent?.toLowerCase().includes('lapse')
-	);
-
-	const groups = new Map<string, RawHeartbeat[]>();
-	for (const hb of lapseHbs) {
-		const entity = hb.entity ?? '';
-		if (!groups.has(entity)) groups.set(entity, []);
-		groups.get(entity)!.push(hb);
-	}
-
-	const result: HeartbeatLapseTimelapse[] = [];
-	for (const [entity, hbs] of groups) {
-		const idMatch = entity.match(/\(([^)]+)\)\s*$/);
-		const id = idMatch?.[1] ?? entity;
-		const name = idMatch ? entity.slice(0, entity.lastIndexOf('(')).trimEnd() : entity;
-
-		const times = hbs.map((hb) => hb.time);
-		result.push({
-			id,
-			name,
-			heartbeatCount: hbs.length,
-			firstSeen: Math.min(...times),
-			lastSeen: Math.max(...times),
-			project: hbs[0].project
-		});
-	}
-
-	log.debug('getLapseTimelapsesFromHeartbeats result', { userId, timelapseCount: result.length });
-	return result.sort((a, b) => b.lastSeen - a.lastSeen);
 }
 
 export interface HackatimeSearchUser {
@@ -623,8 +733,7 @@ export async function getSummary(
 	};
 	if (project) params.project = project;
 
-	const response = await authFetch('/api/summary', params);
-	const data = await response.json();
+	const data = await authFetch('/api/summary', params);
 
 	const result = {
 		projects: data.projects ?? [],

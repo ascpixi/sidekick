@@ -1,16 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import { requirePermission } from '$lib/server/rbac.js';
-import { getRawHeartbeatRange, tzDayBounds, type RawHeartbeat } from '$lib/server/integrations/hackatime.js';
+import { getRawHeartbeatRange, tzDayBounds, HackatimeRateLimitError, type RawHeartbeat } from '$lib/server/integrations/hackatime.js';
 import { createLogger } from '$lib/server/logger.js';
 import type { RequestHandler } from './$types.js';
 
 const logger = createLogger('api:hackatime:heartbeats');
-
-interface CachedHeartbeats {
-	heartbeats: ReturnType<typeof transformHeartbeats>;
-}
-
-const cache = new Map<string, CachedHeartbeats>();
 
 function transformHeartbeats(raw: RawHeartbeat[], projectKeys: Set<string>) {
 	return raw
@@ -33,13 +27,6 @@ function transformHeartbeats(raw: RawHeartbeat[], projectKeys: Set<string>) {
 			lines: hb.lines ?? 0,
 			source_type: hb.source_type ?? 0
 		}));
-}
-
-function isCacheable(date: string, tz: string): boolean {
-	const now = new Date();
-	const today = now.toLocaleDateString('sv-SE', { timeZone: tz });
-	const yesterday = new Date(now.getTime() - 86400000).toLocaleDateString('sv-SE', { timeZone: tz });
-	return date !== today && date !== yesterday;
 }
 
 export const GET: RequestHandler = async ({ params, url, locals }) => {
@@ -72,27 +59,21 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 
 	const projectKeys = new Set(projects.split(',').map((p) => p.trim().toLowerCase()));
 	const effectiveEndDate = endDate ?? date;
-	const cacheKey = `${userId}:${[...projectKeys].sort().join(',')}:${date}:${effectiveEndDate}:${tz}`;
-
-	const cached = cache.get(cacheKey);
-	if (cached) {
-		logger.trace('Cache hit', { cacheKey });
-		return json(cached);
-	}
-	logger.trace('Cache miss', { cacheKey });
 
 	const { startS } = tzDayBounds(date, tz);
 	const { endS } = tzDayBounds(effectiveEndDate, tz);
 
-	const { heartbeats: raw } = await getRawHeartbeatRange(userId, startS, endS);
+	let raw: RawHeartbeat[];
+	try {
+		({ heartbeats: raw } = await getRawHeartbeatRange(userId, startS, endS));
+	} catch (e) {
+		if (e instanceof HackatimeRateLimitError) {
+			throw error(429, 'Hackatime is rate limiting Sidekick; wait a moment and try again');
+		}
+		throw e;
+	}
 	const heartbeats = transformHeartbeats(raw, projectKeys);
 
-	const result = { heartbeats };
-	logger.debug('Fetched heartbeats', { date, endDate: effectiveEndDate, tz, heartbeatCount: heartbeats.length, cached: isCacheable(date, tz) });
-
-	if (!endDate && isCacheable(date, tz)) {
-		cache.set(cacheKey, result);
-	}
-
-	return json(result);
+	logger.debug('Fetched heartbeats', { date, endDate: effectiveEndDate, tz, heartbeatCount: heartbeats.length });
+	return json({ heartbeats });
 };
