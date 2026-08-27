@@ -1,4 +1,6 @@
 import { env } from '$env/dynamic/private';
+import type { Prisma } from '@prisma/client';
+import { db } from '../db.js';
 import { createLogger } from '../logger.js';
 import { aggregateByProject } from './hackatime-duration.js';
 import { LOOKOUT_TOKEN_REGEX } from './lookout.js';
@@ -77,8 +79,27 @@ const inFlight = new Map<string, Promise<unknown>>();
 const RETRY_DELAYS_MS = [1000, 3000];
 const MAX_RETRY_AFTER_MS = 10_000;
 
+// Persistent (Postgres) cache tiers. Heartbeats can technically be backdated,
+// but hours submitted to a YSWS program are final at submission time — late
+// heartbeats wouldn't count anyway — so heartbeat windows that fully ended a
+// while ago are safe to cache for days. The 48h finalization margin absorbs
+// offline editor sync and any timezone offset. Metadata (trust level, project
+// list) genuinely changes and only gets minutes.
+const FINALIZED_AFTER_MS = 48 * 60 * 60 * 1000;
+const HEARTBEATS_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const METADATA_TTL_MS = 10 * 60 * 1000;
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+let lastCleanupMs = 0;
+
+interface AuthFetchOpts {
+	/** Persist the parsed response in Postgres for this long; omit for memory-only caching. */
+	persistTtlMs?: number;
+	/** Hackatime user the request is about, so invalidateHackatimeCache can target it. */
+	cacheUserId?: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON, same contract response.json() had
-async function authFetch(path: string, params?: Record<string, string>): Promise<any> {
+async function authFetch(path: string, params?: Record<string, string>, opts?: AuthFetchOpts): Promise<any> {
 	const token = env.HACKATIME_ADMIN_TOKEN;
 	if (!token) {
 		throw new Error('HACKATIME_ADMIN_TOKEN is not set');
@@ -105,7 +126,7 @@ async function authFetch(path: string, params?: Record<string, string>): Promise
 		return pending;
 	}
 
-	const promise = fetchWithRetry(key, path, params, token);
+	const promise = loadThroughPersistentCache(key, path, params, token, opts);
 	inFlight.set(key, promise);
 	try {
 		const data = await promise;
@@ -118,6 +139,74 @@ async function authFetch(path: string, params?: Record<string, string>): Promise
 	} finally {
 		inFlight.delete(key);
 	}
+}
+
+async function loadThroughPersistentCache(
+	key: string,
+	path: string,
+	params: Record<string, string> | undefined,
+	token: string,
+	opts?: AuthFetchOpts
+): Promise<unknown> {
+	if (opts?.persistTtlMs) {
+		try {
+			const row = await db.hackatimeCache.findUnique({ where: { key } });
+			if (row && row.expiresAt > new Date()) {
+				log.trace('authFetch persistent cache hit', { path });
+				return row.payload;
+			}
+		} catch (err) {
+			log.warn('hackatime cache read failed; fetching live', { path, error: String(err) });
+		}
+	}
+
+	const data = await fetchWithRetry(key, path, params, token);
+
+	if (opts?.persistTtlMs) {
+		const expiresAt = new Date(Date.now() + opts.persistTtlMs);
+		const payload = data as Prisma.InputJsonValue;
+		const hackatimeUserId = opts.cacheUserId ?? null;
+		// Fire-and-forget: a cache write failure must not fail the request.
+		db.hackatimeCache
+			.upsert({
+				where: { key },
+				create: { key, payload, hackatimeUserId, expiresAt },
+				update: { payload, hackatimeUserId, expiresAt }
+			})
+			.catch((err) => log.warn('hackatime cache write failed', { path, error: String(err) }));
+		maybeCleanupCache();
+	}
+
+	return data;
+}
+
+function maybeCleanupCache() {
+	const now = Date.now();
+	if (now - lastCleanupMs < CLEANUP_INTERVAL_MS) return;
+	lastCleanupMs = now;
+	db.hackatimeCache
+		.deleteMany({ where: { expiresAt: { lt: new Date() } } })
+		.then((r) => {
+			if (r.count > 0) log.debug('hackatime cache cleanup', { deleted: r.count });
+		})
+		.catch((err) => log.warn('hackatime cache cleanup failed', { error: String(err) }));
+}
+
+/**
+ * Drops every cached Hackatime response about the given user, from both the
+ * in-memory and the Postgres tier. For when a reviewer needs to see the
+ * user's live data (e.g. a fraud investigation) before TTLs run out.
+ */
+export async function invalidateHackatimeCache(userId: string): Promise<number> {
+	for (const key of [...responseCache.keys()]) {
+		const params = new URL(key).searchParams;
+		if (params.get('id') === userId || params.get('user_id') === userId) {
+			responseCache.delete(key);
+		}
+	}
+	const res = await db.hackatimeCache.deleteMany({ where: { hackatimeUserId: userId } });
+	log.info('hackatime cache invalidated', { userId, dbRows: res.count });
+	return res.count;
 }
 
 async function fetchWithRetry(
@@ -192,7 +281,11 @@ async function getMatchedProjects(
 	userId: string,
 	projectKeys: string[]
 ): Promise<{ names: string[]; earliestS: number; latestS: number } | null> {
-	const data = await authFetch('/api/admin/v1/user/projects', { id: userId });
+	const data = await authFetch(
+		'/api/admin/v1/user/projects',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 	const keySet = new Set(projectKeys.map((k) => k.toLowerCase()));
 
 	interface AdminProject {
@@ -375,7 +468,11 @@ export async function getUserTrustFactor(
 	userId: string
 ): Promise<TrustFactor> {
 	log.debug('getUserTrustFactor called', { userId });
-	const data = await authFetch('/api/admin/v1/user/info', { id: userId });
+	const data = await authFetch(
+		'/api/admin/v1/user/info',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 
 	const result = {
 		trustLevel: data.user.trust_level,
@@ -387,7 +484,11 @@ export async function getUserTrustFactor(
 
 export async function getUserInfo(userId: string): Promise<UserInfo> {
 	log.debug('getUserInfo called', { userId });
-	const data = await authFetch('/api/admin/v1/user/info', { id: userId });
+	const data = await authFetch(
+		'/api/admin/v1/user/info',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 	const result = {
 		trustLevel: data.user.trust_level ?? 'unknown',
 		timezone: data.user.timezone ?? 'UTC'
@@ -407,7 +508,11 @@ interface RawTrustLog {
 
 export async function getTrustLogs(userId: string): Promise<TrustLog[]> {
 	log.debug('getTrustLogs called', { userId });
-	const data = await authFetch('/api/admin/v1/user/trust_logs', { id: userId });
+	const data = await authFetch(
+		'/api/admin/v1/user/trust_logs',
+		{ id: userId },
+		{ persistTtlMs: METADATA_TTL_MS, cacheUserId: userId }
+	);
 	const rawLogs: RawTrustLog[] = data.trust_logs ?? [];
 
 	const uniqueUsernames = [...new Set(rawLogs.map((r) => r.changed_by?.username).filter(Boolean))] as string[];
@@ -511,6 +616,12 @@ export async function getRawHeartbeatRange(
 ): Promise<HeartbeatRangeResult> {
 	log.debug('getRawHeartbeatRange called', { userId, startTimestampS, endTimestampS, project });
 	const timer = log.time('getRawHeartbeatRange');
+	// A window that fully ended a while ago won't meaningfully change — persist
+	// its pages. Windows touching the present stay memory-only.
+	const finalized = endTimestampS * 1000 < Date.now() - FINALIZED_AFTER_MS;
+	const cacheOpts = finalized
+		? { persistTtlMs: HEARTBEATS_TTL_MS, cacheUserId: userId }
+		: undefined;
 	const BATCH_SIZE = 5000;
 	const MAX_FETCH = 500000;
 	let all: RawHeartbeat[] = [];
@@ -530,7 +641,7 @@ export async function getRawHeartbeatRange(
 			offset: String(offset)
 		};
 		if (project !== undefined) params.project = project;
-		const data = await authFetch('/api/admin/v1/user/heartbeats', params);
+		const data = await authFetch('/api/admin/v1/user/heartbeats', params, cacheOpts);
 		const batch: RawHeartbeat[] = data.heartbeats ?? [];
 		const hasMore = data.has_more ?? false;
 		if (batch.length === 0 && hasMore) {
