@@ -74,7 +74,7 @@ export class HackatimeRateLimitError extends Error {
 const CACHE_TTL_MS = 2 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 64;
 const responseCache = new Map<string, { data: unknown; expiresAt: number }>();
-const inFlight = new Map<string, Promise<unknown>>();
+const inFlight = new Map<string, Promise<AuthFetchResult>>();
 
 const RETRY_DELAYS_MS = [1000, 3000];
 const MAX_RETRY_AFTER_MS = 10_000;
@@ -98,8 +98,23 @@ interface AuthFetchOpts {
 	cacheUserId?: string;
 }
 
+interface AuthFetchResult {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON, same contract response.json() had
+	data: any;
+	/** True when served from the in-memory or Postgres cache rather than Hackatime itself. */
+	fromCache: boolean;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed JSON, same contract response.json() had
 async function authFetch(path: string, params?: Record<string, string>, opts?: AuthFetchOpts): Promise<any> {
+	return (await authFetchMeta(path, params, opts)).data;
+}
+
+async function authFetchMeta(
+	path: string,
+	params?: Record<string, string>,
+	opts?: AuthFetchOpts
+): Promise<AuthFetchResult> {
 	const token = env.HACKATIME_ADMIN_TOKEN;
 	if (!token) {
 		throw new Error('HACKATIME_ADMIN_TOKEN is not set');
@@ -116,7 +131,7 @@ async function authFetch(path: string, params?: Record<string, string>, opts?: A
 	const cached = responseCache.get(key);
 	if (cached && cached.expiresAt > Date.now()) {
 		log.trace('authFetch cache hit', { path });
-		return cached.data;
+		return { data: cached.data, fromCache: true };
 	}
 	responseCache.delete(key);
 
@@ -129,13 +144,13 @@ async function authFetch(path: string, params?: Record<string, string>, opts?: A
 	const promise = loadThroughPersistentCache(key, path, params, token, opts);
 	inFlight.set(key, promise);
 	try {
-		const data = await promise;
-		responseCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+		const result = await promise;
+		responseCache.set(key, { data: result.data, expiresAt: Date.now() + CACHE_TTL_MS });
 		while (responseCache.size > CACHE_MAX_ENTRIES) {
 			// Maps iterate in insertion order, so the first key is the oldest entry.
 			responseCache.delete(responseCache.keys().next().value!);
 		}
-		return data;
+		return result;
 	} finally {
 		inFlight.delete(key);
 	}
@@ -147,13 +162,13 @@ async function loadThroughPersistentCache(
 	params: Record<string, string> | undefined,
 	token: string,
 	opts?: AuthFetchOpts
-): Promise<unknown> {
+): Promise<AuthFetchResult> {
 	if (opts?.persistTtlMs) {
 		try {
 			const row = await db.hackatimeCache.findUnique({ where: { key } });
 			if (row && row.expiresAt > new Date()) {
 				log.trace('authFetch persistent cache hit', { path });
-				return row.payload;
+				return { data: row.payload, fromCache: true };
 			}
 		} catch (err) {
 			log.warn('hackatime cache read failed; fetching live', { path, error: String(err) });
@@ -177,7 +192,7 @@ async function loadThroughPersistentCache(
 		maybeCleanupCache();
 	}
 
-	return data;
+	return { data, fromCache: false };
 }
 
 function maybeCleanupCache() {
@@ -598,6 +613,8 @@ export interface HeartbeatRangeResult {
 	heartbeats: RawHeartbeat[];
 	/** True if the fetch hit the safety cap and the tail of the range is missing. */
 	truncated: boolean;
+	/** True if any page was served from a cache tier instead of Hackatime live. */
+	fromCache: boolean;
 }
 
 /**
@@ -627,6 +644,7 @@ export async function getRawHeartbeatRange(
 	let all: RawHeartbeat[] = [];
 	let offset = 0;
 	let truncated = false;
+	let fromCache = false;
 
 	for (;;) {
 		if (all.length >= MAX_FETCH) {
@@ -641,7 +659,12 @@ export async function getRawHeartbeatRange(
 			offset: String(offset)
 		};
 		if (project !== undefined) params.project = project;
-		const data = await authFetch('/api/admin/v1/user/heartbeats', params, cacheOpts);
+		const { data, fromCache: pageFromCache } = await authFetchMeta(
+			'/api/admin/v1/user/heartbeats',
+			params,
+			cacheOpts
+		);
+		fromCache ||= pageFromCache;
 		const batch: RawHeartbeat[] = data.heartbeats ?? [];
 		const hasMore = data.has_more ?? false;
 		if (batch.length === 0 && hasMore) {
@@ -666,8 +689,8 @@ export async function getRawHeartbeatRange(
 		});
 	}
 
-	timer.end({ userId, totalHeartbeats: all.length, truncated });
-	return { heartbeats: all, truncated };
+	timer.end({ userId, totalHeartbeats: all.length, truncated, fromCache });
+	return { heartbeats: all, truncated, fromCache };
 }
 
 export interface HackatimeSearchUser {

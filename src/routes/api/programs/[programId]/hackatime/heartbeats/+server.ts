@@ -64,8 +64,9 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 	const { endS } = tzDayBounds(effectiveEndDate, tz);
 
 	let raw: RawHeartbeat[];
+	let fromCache: boolean;
 	try {
-		({ heartbeats: raw } = await getRawHeartbeatRange(userId, startS, endS));
+		({ heartbeats: raw, fromCache } = await getRawHeartbeatRange(userId, startS, endS));
 	} catch (e) {
 		if (e instanceof HackatimeRateLimitError) {
 			throw error(429, 'Hackatime is rate limiting Sidekick; wait a moment and try again');
@@ -74,6 +75,6 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 	}
 	const heartbeats = transformHeartbeats(raw, projectKeys);
 
-	logger.debug('Fetched heartbeats', { date, endDate: effectiveEndDate, tz, heartbeatCount: heartbeats.length });
-	return json({ heartbeats });
+	logger.debug('Fetched heartbeats', { date, endDate: effectiveEndDate, tz, heartbeatCount: heartbeats.length, fromCache });
+	return json({ heartbeats, fromCache });
 };

@@ -158,6 +158,7 @@
 	let breakdownScope = $state<'day' | 'all'>('day');
 	let allHeartbeats = $state<HeartbeatRow[] | null>(null);
 	let allHeartbeatsLoading = $state(false);
+	let heartbeatsFromCache = $state(false);
 
 	const detailTabs = [
 		{ id: 'graph', label: 'Graph', icon: ChartLine },
@@ -518,6 +519,7 @@
 				}
 
 				heartbeats = data.heartbeats;
+				heartbeatsFromCache = data.fromCache ?? false;
 				t.end('heartbeats', data.heartbeats?.length ?? 0);
 			})
 			.catch((e) => {
@@ -530,6 +532,7 @@
 				}
 
 				heartbeats = null;
+				heartbeatsFromCache = false;
 				error = e.message;
 				log.error('Failed to fetch heartbeats', { date }, e);
 			})
@@ -859,6 +862,12 @@
 				<p class="text-[12px] text-text-secondary tracking-[-0.24px] flex items-center gap-1.5">
 					{#if codingHeartbeats}
 						{codingHeartbeats.length} heartbeat{codingHeartbeats.length === 1 ? '' : 's'}
+						{#if heartbeatsFromCache}
+							<span
+								class="text-text-tertiary"
+								title="Served from Sidekick's cache — use “Refresh data” to refetch live">(cached)</span
+							>
+						{/if}
 					{:else}
 						No data
 					{/if}
@@ -908,29 +917,31 @@
 				{/if}
 			</div>
 		</div>
-		<button
-			class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-4 bg-page border border-border-card text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-default"
-			onclick={refreshHackatimeData}
-			disabled={refreshing}
-			title="Drop cached Hackatime data and refetch live"
-		>
-			<RefreshCw size={12} class={refreshing ? 'animate-spin' : ''} />
-			Refresh data
-		</button>
-		<button
-			class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-2 {telescreenCopied
-				? 'bg-check-pass/10 text-check-pass border border-check-pass/30'
-				: 'bg-page border border-border-card text-text-secondary hover:text-text-primary'}"
-			onclick={copyTelescreenLink}
-		>
-			{#if telescreenCopied}
-				<Check size={12} />
-				Copied
-			{:else}
-				<ExternalLink size={12} />
-				Copy Telescreen link
-			{/if}
-		</button>
+		<div class="flex items-center shrink-0 ml-4">
+			<button
+				class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 bg-page border border-border-card text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-default"
+				onclick={refreshHackatimeData}
+				disabled={refreshing}
+				title="Drop cached Hackatime data and refetch live"
+			>
+				<RefreshCw size={12} class={refreshing ? 'animate-spin' : ''} />
+				Refresh data
+			</button>
+			<button
+				class="flex items-center gap-1 text-[11px] px-2 py-1 rounded-tag cursor-pointer transition-colors shrink-0 ml-2 {telescreenCopied
+					? 'bg-check-pass/10 text-check-pass border border-check-pass/30'
+					: 'bg-page border border-border-card text-text-secondary hover:text-text-primary'}"
+				onclick={copyTelescreenLink}
+			>
+				{#if telescreenCopied}
+					<Check size={12} />
+					Copied
+				{:else}
+					<ExternalLink size={12} />
+					Copy Telescreen link
+				{/if}
+			</button>
+		</div>
 	</div>
 
 	<div class="border-b border-border-card bg-surface/20 relative">
