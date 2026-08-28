@@ -18,6 +18,11 @@
 		CircleHelp,
 		RefreshCw
 	} from 'lucide-svelte';
+	import {
+		cachedHackatimeFetch,
+		invalidateClientHackatimeCache,
+		HackatimeFetchError
+	} from '$lib/review/hackatimeClientCache.js';
 	import HeartbeatFrequencyBar from './HeartbeatFrequencyBar.svelte';
 	import HeartbeatScatter from './HeartbeatScatter.svelte';
 	import HeartbeatTable from './HeartbeatTable.svelte';
@@ -232,13 +237,10 @@
 		const t = log.time(`fetchActivity:${ym}`);
 
 		try {
-			const res = await fetch(`/api/programs/${programId}/hackatime/activity?${params}`);
-			t.end('status', res.status);
-			if (!res.ok) {
-				log.warn('Activity fetch returned non-ok', { ym, status: res.status });
-				return [];
-			}
-			const data = await res.json();
+			const { data } = await cachedHackatimeFetch(
+				`/api/programs/${programId}/hackatime/activity?${params}`
+			);
+			t.end('ok');
 			activityCache[ym] = data.days;
 			log.debug('Activity data fetched', { ym, dayCount: data.days?.length ?? 0 });
 			return data.days;
@@ -500,16 +502,8 @@
 			tz: authorTimezone
 		});
 
-		fetch(`/api/programs/${programId}/hackatime/heartbeats?${params}`)
-			.then(async (res) => {
-				if (res.status === 429) {
-					throw new Error(
-						'Hackatime rate limit hit — wait a few seconds, then switch days to retry'
-					);
-				}
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-				const data = await res.json();
+		cachedHackatimeFetch(`/api/programs/${programId}/hackatime/heartbeats?${params}`)
+			.then(({ data, fromClientCache }) => {
 				if (date !== currentDate) {
 					log.debug('Heartbeat response discarded (date changed)', {
 						requestedDate: date,
@@ -519,10 +513,15 @@
 				}
 
 				heartbeats = data.heartbeats;
-				heartbeatsFromCache = data.fromCache ?? false;
+				heartbeatsFromCache = fromClientCache || (data.fromCache ?? false);
 				t.end('heartbeats', data.heartbeats?.length ?? 0);
 			})
 			.catch((e) => {
+				if (e instanceof HackatimeFetchError && e.status === 429) {
+					e = new Error(
+						'Hackatime rate limit hit — wait a few seconds, then switch days to retry'
+					);
+				}
 				if (date !== currentDate) {
 					log.debug('Heartbeat error discarded (date changed)', {
 						requestedDate: date,
@@ -662,8 +661,10 @@
 				{ method: 'DELETE' }
 			);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			invalidateClientHackatimeCache(hackatimeUser);
 			activityCache = {};
 			allHeartbeats = null;
+			commitGaps = {};
 			refreshNonce++;
 			await loadOverview();
 		} catch (e) {
@@ -689,9 +690,9 @@
 				endDate: lastDate,
 				tz: authorTimezone
 			});
-			const res = await fetch(`/api/programs/${programId}/hackatime/heartbeats?${params}`);
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const data = await res.json();
+			const { data } = await cachedHackatimeFetch(
+				`/api/programs/${programId}/hackatime/heartbeats?${params}`
+			);
 			allHeartbeats = data.heartbeats;
 		} catch (e) {
 			log.error('Failed to fetch all heartbeats', {}, e);
@@ -776,9 +777,9 @@
 		});
 
 		try {
-			const res = await fetch(`/api/programs/${programId}/hackatime/heartbeats?${params}`);
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const data = await res.json();
+			const { data } = await cachedHackatimeFetch(
+				`/api/programs/${programId}/hackatime/heartbeats?${params}`
+			);
 			const hbTimes = (data.heartbeats as HeartbeatRow[])
 				.filter((hb) => hb.editor !== 'lapse' && !hb.user_agent.toLowerCase().includes('lapse'))
 				.map((hb) => hb.time)
