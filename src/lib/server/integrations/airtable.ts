@@ -77,6 +77,7 @@ function pathMatches(query: string, stored: string): boolean {
 }
 
 const recordCache = new Map<string, { records: AirtableRecord[]; expiresAt: number }>();
+const inflightRequests = new Map<string, Promise<AirtableRecord[]>>();
 const CACHE_TTL = 15 * 60 * 1000;
 
 export async function findRecordsByUrl(
@@ -90,8 +91,29 @@ export async function findRecordsByUrl(
 		log.trace('findRecordsByUrl cache hit', { cacheKey, recordCount: cached.records.length });
 		return cached.records;
 	}
+
+	const inflight = inflightRequests.get(cacheKey);
+	if (inflight) {
+		log.trace('findRecordsByUrl coalesced with in-flight request', { cacheKey });
+		return inflight;
+	}
+
 	log.trace('findRecordsByUrl cache miss', { cacheKey });
 
+	const promise = fetchRecordsByUrl(playableUrl, codeUrl, cacheKey);
+	inflightRequests.set(cacheKey, promise);
+	try {
+		return await promise;
+	} finally {
+		inflightRequests.delete(cacheKey);
+	}
+}
+
+async function fetchRecordsByUrl(
+	playableUrl: string,
+	codeUrl: string,
+	cacheKey: string
+): Promise<AirtableRecord[]> {
 	const baseId = env.AIRTABLE_BASE_ID;
 	const tableId = env.AIRTABLE_TABLE_ID;
 	const pat = env.AIRTABLE_PAT;
