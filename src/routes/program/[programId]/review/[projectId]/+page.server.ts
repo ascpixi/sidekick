@@ -549,6 +549,8 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 			email: author.email,
 			avatarUrl: author.avatarUrl,
 			slackId: author.slackId,
+			// Supplied by the program (from its own HCA sign-in records), not resolved here.
+			hcaName: project.authorHcaName?.trim() || null,
 			hackatimeId: authorUser?.hackatimeId ?? project.hackatimeId ?? null,
 			joinDate: authorUser ? formatJoinDate(authorUser.createdAt) : ''
 		},

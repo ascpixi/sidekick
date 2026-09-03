@@ -33,6 +33,11 @@ export interface Project {
   codeUrl: string;
   screenshotUrl?: string;
   authorId: string; // Slack ID ("U...") or HCA ID ("ident!...")
+  // The author's full name as recorded by Hack Club Auth. Programs that sign
+  // participants in via HCA already have this on file — send it so reviewers
+  // see the HCA name on the author card alongside the Slack-resolved display
+  // name. Sidekick never looks it up itself; omit if you don't have it.
+  authorHcaName?: string;
   hackatimeId?: string; // Hackatime user lookup — Slack ID, HCA ID, or Hackatime numeric ID. Falls back to authorId if omitted.
   hackatimeProjectKeys: string[];
   // ISO date (YYYY-MM-DD). When set, Sidekick only counts Hackatime activity on

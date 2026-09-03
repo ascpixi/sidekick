@@ -63,6 +63,8 @@ export interface ProjectExportAuthor {
 	email: string | null;
 	avatarUrl: string | null;
 	slackId: string | null;
+	/** Full name from Hack Club Auth, as reported by the program; null when not supplied. */
+	hcaName: string | null;
 	hackatimeId: string | null;
 	/** Human-readable join date label (e.g. "Joined 3mo ago"). */
 	joinDate: string;

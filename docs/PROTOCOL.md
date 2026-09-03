@@ -66,6 +66,7 @@ A **project** is the primary entity - the thing a participant is building. It ha
   "demoUrl": "https://comet-chat.vercel.app",
   "screenshotUrl": "https://your-cdn.com/screenshots/comet-chat.png",
   "authorId": "U05ABCDEF",
+  "authorHcaName": "Ada Lovelace",
   "hackatimeId": "12345",
   "hackatimeProjectKeys": ["comet-chat", "comet-chat-v2"],
   "tags": [
@@ -103,6 +104,7 @@ A **project** is the primary entity - the thing a participant is building. It ha
 | `demoUrl`              | `string`   | No       | Live demo URL. Not all projects have one.                                                                                                   |
 | `screenshotUrl`        | `string`   | No       | Screenshot or preview image.                                                                                                                |
 | `authorId`             | `string`   | Yes      | Slack ID (`U...`) or HCA ID (`ident!...`) of the author.                                                                                    |
+| `authorHcaName`        | `string`   | No       | The author's full name as recorded by Hack Club Auth. If your program signs participants in via HCA, send the name you stored at sign-in; Sidekick shows it on the author card next to the Slack-resolved display name. Sidekick never looks this up itself. |
 | `hackatimeId`          | `string`   | No       | Hackatime user identifier - Slack ID, HCA ID, or Hackatime numeric ID. If omitted, Sidekick falls back to `authorId` for Hackatime lookups. |
 | `hackatimeProjectKeys` | `string[]` | Yes      | Hackatime project keys to aggregate. Empty array if not using Hackatime.                                                                    |
 | `hackatimeStartDate`   | `string`   | No       | ISO date (`YYYY-MM-DD`). When set, Sidekick only counts Hackatime activity on or after this date when aggregating hours - send your event's start date so pre-event time on reused Hackatime projects doesn't inflate totals. Omit to count all-time. Also rendered as a cutoff marker in the reviewer's Hackatime day list, with pre-cutoff days dimmed. |
