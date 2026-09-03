@@ -454,6 +454,7 @@
 			email: data.author.email ?? null,
 			avatarUrl: data.author.avatarUrl,
 			slackId: data.author.slackId ?? null,
+			hcaName: data.author.hcaName,
 			hackatimeId: data.author.hackatimeId,
 			joinDate: data.author.joinDate
 		},
@@ -744,6 +745,7 @@
 					slackId={data.author.slackId}
 					hackatimeId={data.author.hackatimeId}
 					email={data.author.email}
+					hcaName={data.author.hcaName}
 					trustLevel={hackatime?.trustLevel ?? null}
 					trustLogs={hackatime?.trustLogs ?? []}
 					loading={!hackatime}

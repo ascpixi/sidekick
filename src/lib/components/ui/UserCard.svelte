@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Avatar from './Avatar.svelte';
 	import SlackIcon from '../icons/SlackIcon.svelte';
-	import { ShieldAlert, Clock, Mail, ArrowRight, Eye, Pencil, X, Check, StickyNote } from 'lucide-svelte';
+	import { ShieldAlert, Clock, Mail, ArrowRight, Eye, Pencil, X, Check, StickyNote, IdCard } from 'lucide-svelte';
 	import type { TrustLog } from '$lib/server/integrations/hackatime.js';
 
 	interface Props {
@@ -11,6 +11,9 @@
 		slackId?: string | null;
 		hackatimeId?: string | null;
 		email?: string | null;
+		// Full name from Hack Club Auth, as reported by the program. Shown above
+		// the trust level so reviewers can compare it against the Slack name.
+		hcaName?: string | null;
 		trustLevel?: string | null;
 		trustLogs?: TrustLog[];
 		slackDeactivated?: boolean | null;
@@ -32,6 +35,7 @@
 		slackId = null,
 		hackatimeId = null,
 		email = null,
+		hcaName = null,
 		trustLevel = null,
 		trustLogs = [],
 		slackDeactivated = null,
@@ -162,6 +166,18 @@
 	</div>
 
 	<div class="flex flex-col gap-2 w-full">
+		{#if hcaName}
+			<div class="flex items-center justify-between w-full gap-2">
+				<div class="flex gap-1.5 items-center shrink-0">
+					<IdCard size={14} class="text-text-primary" />
+					<span class="text-sm text-text-primary tracking-[-0.3px]">HCA name</span>
+				</div>
+				<span class="text-sm text-text-primary tracking-[-0.3px] truncate min-w-0" title={hcaName}
+					>{hcaName}</span
+				>
+			</div>
+		{/if}
+
 		{#if loading && !trustLevel}
 			<div class="flex items-center justify-between w-full animate-pulse">
 				<div class="flex gap-1.5 items-center">
