@@ -11,8 +11,6 @@
 		slackId?: string | null;
 		hackatimeId?: string | null;
 		email?: string | null;
-		// Full name from Hack Club Auth, as reported by the program. Shown above
-		// the trust level so reviewers can compare it against the Slack name.
 		hcaName?: string | null;
 		trustLevel?: string | null;
 		trustLogs?: TrustLog[];
